@@ -46,6 +46,13 @@ const WEEKDAYS = [
   ["saturday", "Sabado"],
   ["sunday", "Domingo"],
 ];
+const MEAL_TYPES = [
+  ["breakfast", "Desayuno"],
+  ["lunch", "Almuerzo"],
+  ["dinner", "Cena"],
+  ["snack", "Snack"],
+  ["dessert", "Postre"],
+];
 
 let settings = JSON.parse(localStorage.getItem(STORE) || "{}");
 let token = settings.token || sessionStorage.getItem("pt_session_token") || "";
@@ -53,6 +60,7 @@ let plan = null;
 let state = null;
 let todayWorkout = null;
 let weekWorkouts = {};
+let weekNutrition = {};
 let exerciseDb = [];
 
 const $ = (id) => document.getElementById(id);
@@ -379,8 +387,70 @@ function exerciseRow(ex) {
 }
 
 function renderFood() {
-  $("food").innerHTML = `<div class="card"><div class="muted">${today()}</div><h2>Comida</h2><div class="grid"><label>Tipo<select id="mealType"><option>breakfast</option><option>lunch</option><option>dinner</option><option>snack</option><option>dessert</option></select></label><label>Hora aprox.<input id="mealTime" placeholder="13:30"></label></div><label>Foto antes<input id="mealBefore" type="file" accept="image/*"></label><label>Foto despues opcional<input id="mealAfter" type="file" accept="image/*"></label><label>Items / descripcion<textarea id="mealItems" placeholder="pollo con arroz&#10;ensalada&#10;agua"></textarea></label><label>Notas para estimacion<textarea id="mealNotes" placeholder="Sobro media porcion. La foto despues muestra lo que no comi."></textarea></label><div class="card status">Las fotos se suben comprimidas al repo privado. Kcal y proteina quedan para estimacion posterior de ChatGPT.</div><div class="actions"><button class="btn" id="saveMeal">Guardar comida</button></div><div id="mealStatus" class="status"></div></div>`;
+  const mealOptions = MEAL_TYPES.map(([value, label]) => `<option value="${value}">${label}</option>`).join("");
+  $("food").innerHTML = `<div id="foodWeek"></div><div class="card"><div class="muted" id="mealEditingDate">${today()}</div><h2>Comida</h2><input id="mealEditDate" type="hidden"><input id="mealEditIndex" type="hidden"><div class="grid"><label>Tipo<select id="mealType">${mealOptions}</select></label><label>Hora aprox.<input id="mealTime" placeholder="13:30"></label></div><div class="photo-actions"><label class="photo-btn">Foto antes<input id="mealBefore" type="file" accept="image/*"></label><label class="photo-btn optional">Foto despues<input id="mealAfter" type="file" accept="image/*"></label></div><label>Items / descripcion<textarea id="mealItems" placeholder="pollo con arroz&#10;ensalada&#10;agua"></textarea></label><label>Notas para estimacion<textarea id="mealNotes" placeholder="Sobro media porcion. La foto despues muestra lo que no comi."></textarea></label><div class="card status">Vista semanal en lectura. Usa Editar solo para corregir una entrada. Kcal y proteina quedan para ChatGPT.</div><div class="actions"><button class="btn" id="saveMeal">Guardar comida</button><button class="btn" id="newMeal">Nueva comida</button></div><div id="mealStatus" class="status"></div></div>`;
   $("saveMeal").onclick = saveMeal;
+  $("newMeal").onclick = clearMealForm;
+  renderFoodWeek();
+}
+
+function mealLabel(value) {
+  return MEAL_TYPES.find(([key]) => key === value)?.[1] || value || "Comida";
+}
+
+function clearMealForm() {
+  $("mealEditingDate").textContent = today();
+  $("mealEditDate").value = "";
+  $("mealEditIndex").value = "";
+  $("mealType").value = "breakfast";
+  $("mealTime").value = "";
+  $("mealBefore").value = "";
+  $("mealAfter").value = "";
+  $("mealItems").value = "";
+  $("mealNotes").value = "";
+  $("mealStatus").textContent = "";
+}
+
+function editMeal(date, index) {
+  const meal = weekNutrition[date]?.meals?.[index];
+  if (!meal) return;
+  $("mealEditingDate").textContent = `Editando ${date}`;
+  $("mealEditDate").value = date;
+  $("mealEditIndex").value = index;
+  $("mealType").value = meal.meal || "breakfast";
+  $("mealTime").value = meal.time_approx || "";
+  $("mealItems").value = (meal.items || []).map((item) => item.name || "").join("\n");
+  $("mealNotes").value = meal.notes || "";
+  $("mealBefore").value = "";
+  $("mealAfter").value = "";
+  $("mealStatus").textContent = "Editando comida existente. Las fotos actuales se conservan si no subes nuevas.";
+}
+
+function renderFoodWeek() {
+  const root = $("foodWeek");
+  root.innerHTML = "";
+  weekDates().forEach(([, label, date]) => {
+    const nutrition = weekNutrition[date];
+    const meals = nutrition?.meals || [];
+    const card = document.createElement("details");
+    card.className = "card day-plan";
+    card.open = date === today();
+    card.innerHTML = `<summary><span><b>${label}</b><span class="muted"> ${date}</span></span><span class="pill">${meals.length ? `${meals.length} comidas` : "sin registro"}</span></summary>`;
+    meals.forEach((meal, index) => {
+      const items = (meal.items || []).map((item) => item.name).filter(Boolean).join(", ");
+      const photos = meal.photos
+        ? [meal.photos.before_path ? "foto antes" : "", meal.photos.after_path ? "foto despues" : ""].filter(Boolean).join(" · ")
+        : "";
+      card.innerHTML += `<div class="meal-read"><div><div class="name">${mealLabel(meal.meal)} ${meal.time_approx || ""}</div><div class="dose">${items || "Sin descripcion"}</div>${meal.notes ? `<div class="muted">${meal.notes}</div>` : ""}${photos ? `<div class="muted">${photos}</div>` : ""}</div><button class="btn mini" data-meal="${date}:${index}">Editar</button></div>`;
+    });
+    root.append(card);
+  });
+  root.querySelectorAll("[data-meal]").forEach((button) => {
+    button.onclick = () => {
+      const [date, index] = button.dataset.meal.split(":");
+      editMeal(date, Number(index));
+    };
+  });
 }
 
 function renderReport() {
@@ -451,9 +521,18 @@ async function loadData() {
         ]),
       ),
     );
+    weekNutrition = Object.fromEntries(
+      await Promise.all(
+        weekDates().map(async ([, , date]) => [
+          date,
+          await getJson(`data/nutrition/${date}.json`, null),
+        ]),
+      ),
+    );
     status.textContent = "Datos cargados.";
     renderToday();
     renderWeek();
+    renderFood();
     renderReport();
   } catch (err) {
     status.textContent = err.message;
@@ -478,29 +557,31 @@ async function saveMeal() {
   const status = $("mealStatus");
   try {
     status.textContent = "Guardando...";
-    const existing = await getJson(`data/nutrition/${today()}.json`, {
-      date: today(),
+    const date = $("mealEditDate").value || today();
+    const editIndex = $("mealEditIndex").value === "" ? -1 : Number($("mealEditIndex").value);
+    const existing = await getJson(`data/nutrition/${date}.json`, {
+      date,
       timezone: TZ,
       source: "public-pwa",
       meals: [],
       notes: "",
     });
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const photos = {};
+    const photos = editIndex >= 0 ? { ...(existing.meals[editIndex]?.photos || {}) } : {};
     if ($("mealBefore").files[0]) {
-      photos.before_path = `data/media/nutrition/${today()}/${stamp}-before.jpg`;
+      photos.before_path = `data/media/nutrition/${date}/${stamp}-before.jpg`;
       await putBase64(
         photos.before_path,
         await imageToJpeg($("mealBefore").files[0]),
-        `Upload meal before photo ${today()}`,
+        `Upload meal before photo ${date}`,
       );
     }
     if ($("mealAfter").files[0]) {
-      photos.after_path = `data/media/nutrition/${today()}/${stamp}-after.jpg`;
+      photos.after_path = `data/media/nutrition/${date}/${stamp}-after.jpg`;
       await putBase64(
         photos.after_path,
         await imageToJpeg($("mealAfter").files[0]),
-        `Upload meal after photo ${today()}`,
+        `Upload meal after photo ${date}`,
       );
     }
     const meal = {
@@ -512,10 +593,13 @@ async function saveMeal() {
       photos,
       estimate_status: "pending_chatgpt",
     };
-    existing.meals.push(meal);
-    await putJson(`data/nutrition/${today()}.json`, existing, `Log nutrition ${today()}`);
+    if (editIndex >= 0) existing.meals[editIndex] = meal;
+    else existing.meals.push(meal);
+    await putJson(`data/nutrition/${date}.json`, existing, `Log nutrition ${date}`);
     await saveCurrentState({ latest_nutrition: existing });
-    status.textContent = "Comida guardada en GitHub.";
+    weekNutrition[date] = existing;
+    renderFood();
+    $("mealStatus").textContent = "Comida guardada en GitHub.";
   } catch (err) {
     status.textContent = err.message;
     status.classList.add("bad");
