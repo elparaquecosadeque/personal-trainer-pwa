@@ -388,7 +388,7 @@ function exerciseRow(ex) {
 
 function renderFood() {
   const mealOptions = MEAL_TYPES.map(([value, label]) => `<option value="${value}">${label}</option>`).join("");
-  $("food").innerHTML = `<div id="foodWeek"></div><div class="card"><div class="muted" id="mealEditingDate">${today()}</div><h2>Comida</h2><input id="mealEditDate" type="hidden"><input id="mealEditIndex" type="hidden"><div class="grid"><label>Tipo<select id="mealType">${mealOptions}</select></label><label>Hora aprox.<input id="mealTime" placeholder="13:30"></label></div><div class="photo-actions"><label class="photo-btn">Foto antes<input id="mealBefore" type="file" accept="image/*"></label><label class="photo-btn optional">Foto despues<input id="mealAfter" type="file" accept="image/*"></label></div><label>Items / descripcion<textarea id="mealItems" placeholder="pollo con arroz&#10;ensalada&#10;agua"></textarea></label><label>Notas para estimacion<textarea id="mealNotes" placeholder="Sobro media porcion. La foto despues muestra lo que no comi."></textarea></label><div class="card status">Vista semanal en lectura. Usa Editar solo para corregir una entrada. Kcal y proteina quedan para ChatGPT.</div><div class="actions"><button class="btn" id="saveMeal">Guardar comida</button><button class="btn" id="newMeal">Nueva comida</button></div><div id="mealStatus" class="status"></div></div>`;
+  $("food").innerHTML = `<div id="foodWeek"></div><div class="card" id="mealForm"><div class="muted" id="mealEditingDate">Nueva comida</div><h2>Comida</h2><input id="mealEditIndex" type="hidden"><div class="grid"><label>Fecha<input id="mealDate" type="date" value="${today()}"></label><label>Tipo<select id="mealType">${mealOptions}</select></label><label>Hora aprox.<input id="mealTime" placeholder="13:30"></label></div><div class="photo-actions"><label class="photo-btn">Foto antes<input id="mealBefore" type="file" accept="image/*"></label><label class="photo-btn optional">Foto despues<input id="mealAfter" type="file" accept="image/*"></label></div><label>Items / descripcion<textarea id="mealItems" placeholder="pollo con arroz&#10;ensalada&#10;agua"></textarea></label><label>Notas para estimacion<textarea id="mealNotes" placeholder="Sobro media porcion. La foto despues muestra lo que no comi."></textarea></label><div class="card status">Vista semanal en lectura. Usa Editar solo para corregir una entrada. Kcal y proteina quedan para ChatGPT.</div><div class="actions"><button class="btn" id="saveMeal">Guardar comida</button><button class="btn" id="newMeal">Nueva comida</button></div><div id="mealStatus" class="status"></div></div>`;
   $("saveMeal").onclick = saveMeal;
   $("newMeal").onclick = clearMealForm;
   renderFoodWeek();
@@ -399,8 +399,8 @@ function mealLabel(value) {
 }
 
 function clearMealForm() {
-  $("mealEditingDate").textContent = today();
-  $("mealEditDate").value = "";
+  $("mealEditingDate").textContent = "Nueva comida";
+  $("mealDate").value = today();
   $("mealEditIndex").value = "";
   $("mealType").value = "breakfast";
   $("mealTime").value = "";
@@ -415,7 +415,7 @@ function editMeal(date, index) {
   const meal = weekNutrition[date]?.meals?.[index];
   if (!meal) return;
   $("mealEditingDate").textContent = `Editando ${date}`;
-  $("mealEditDate").value = date;
+  $("mealDate").value = date;
   $("mealEditIndex").value = index;
   $("mealType").value = meal.meal || "breakfast";
   $("mealTime").value = meal.time_approx || "";
@@ -423,7 +423,9 @@ function editMeal(date, index) {
   $("mealNotes").value = meal.notes || "";
   $("mealBefore").value = "";
   $("mealAfter").value = "";
+  $("saveMeal").textContent = "Guardar cambios";
   $("mealStatus").textContent = "Editando comida existente. Las fotos actuales se conservan si no subes nuevas.";
+  $("mealForm").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function renderFoodWeek() {
@@ -557,7 +559,7 @@ async function saveMeal() {
   const status = $("mealStatus");
   try {
     status.textContent = "Guardando...";
-    const date = $("mealEditDate").value || today();
+    const date = $("mealDate").value || today();
     const editIndex = $("mealEditIndex").value === "" ? -1 : Number($("mealEditIndex").value);
     const existing = await getJson(`data/nutrition/${date}.json`, {
       date,
@@ -585,6 +587,7 @@ async function saveMeal() {
       );
     }
     const meal = {
+      ...(editIndex >= 0 ? existing.meals[editIndex] || {} : {}),
       meal: $("mealType").value,
       time_approx: $("mealTime").value || null,
       time_accuracy: $("mealTime").value ? "user_entered" : "unknown",
