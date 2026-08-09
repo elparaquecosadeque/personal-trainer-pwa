@@ -31,6 +31,24 @@ const TEXT = {
     saved: "Settings guardados.",
     unlocked: "Token desbloqueado para esta sesion.",
     badPassphrase: "Passphrase incorrecta.",
+    unlockFirst: "Desbloquea el token en Settings para cargar tus datos.",
+    configureFirst: "Configura GitHub en Settings primero.",
+    tokenNeedsPassphrase: "Ingresa una passphrase para guardar o cifrar el token.",
+    plainTokenWarning: "Hay un token guardado sin cifrar. Ingresa una passphrase y guarda Settings para cifrarlo.",
+    partialLanguage: "Idioma parcial: cambian las etiquetas principales; los datos y nombres del plan se conservan como fueron guardados.",
+    loadingGithub: "Cargando GitHub...",
+    dataLoaded: "Datos cargados.",
+    mealSaved: "Comida guardada en GitHub.",
+    newMeal: "Nueva comida",
+    editingMeal: "Editando",
+    cancelEdit: "Cancelar edición",
+    saveMeal: "Guardar comida",
+    saveChanges: "Guardar cambios",
+    weekScope: "Semana visible",
+    pendingForChatGPT: "Pendiente para ChatGPT",
+    noPending: "No hay comidas pendientes en la semana visible.",
+    copyPrompt: "Copiar pedido",
+    promptCopied: "Pedido copiado.",
   },
   en: {
     today: "Today",
@@ -60,6 +78,24 @@ const TEXT = {
     saved: "Settings saved.",
     unlocked: "Token unlocked for this session.",
     badPassphrase: "Wrong passphrase.",
+    unlockFirst: "Unlock the token in Settings to load your data.",
+    configureFirst: "Configure GitHub in Settings first.",
+    tokenNeedsPassphrase: "Enter a passphrase to save or encrypt the token.",
+    plainTokenWarning: "A token is stored without encryption. Enter a passphrase and save Settings to encrypt it.",
+    partialLanguage: "Partial language: main labels change; saved data and plan names stay as stored.",
+    loadingGithub: "Loading GitHub...",
+    dataLoaded: "Data loaded.",
+    mealSaved: "Meal saved to GitHub.",
+    newMeal: "New meal",
+    editingMeal: "Editing",
+    cancelEdit: "Cancel edit",
+    saveMeal: "Save meal",
+    saveChanges: "Save changes",
+    weekScope: "Visible week",
+    pendingForChatGPT: "Pending for ChatGPT",
+    noPending: "No pending meals in the visible week.",
+    copyPrompt: "Copy request",
+    promptCopied: "Request copied.",
   },
 };
 const SESSION_META = {
@@ -357,7 +393,7 @@ function groupedExercises(workout) {
 function renderToday() {
   const root = $("today");
   if (!token) {
-    root.innerHTML = `<div class="card status bad">Configura GitHub en Settings primero.</div>`;
+    root.innerHTML = `<div class="card status bad">${settings.token_cipher ? tr("unlockFirst") : tr("configureFirst")}</div>`;
     return;
   }
   const workout = todayWorkout || plannedWorkout();
@@ -470,9 +506,10 @@ function renderFood() {
   const mealOptions = MEAL_TYPES.map(
     ([value, es, en]) => `<option value="${value}">${settings.language === "en" ? en : es}</option>`,
   ).join("");
-  $("food").innerHTML = `${weekNavHtml()}<div id="foodWeek"></div><div class="card" id="mealForm"><div class="muted" id="mealEditingDate">Nueva comida</div><h2>Comida</h2><input id="mealEditIndex" type="hidden"><div class="grid"><label>Fecha<input id="mealDate" type="date" value="${today()}"></label><label>Tipo<select id="mealType">${mealOptions}</select></label><label>Hora aprox.<input id="mealTime" placeholder="13:30"></label></div><div class="photo-actions"><label class="photo-btn">Foto antes<input id="mealBefore" type="file" accept="image/*"></label><label class="photo-btn optional">Foto despues<input id="mealAfter" type="file" accept="image/*"></label></div><label>Items / descripcion<textarea id="mealItems" placeholder="pollo con arroz&#10;ensalada&#10;agua"></textarea></label><label>Notas para estimacion<textarea id="mealNotes" placeholder="Sobro media porcion. La foto despues muestra lo que no comi."></textarea></label><div class="card status">Vista semanal en lectura. Usa Editar solo para corregir una entrada. Kcal y proteina quedan para ChatGPT.</div><div class="actions"><button class="btn" id="saveMeal">Guardar comida</button><button class="btn" id="newMeal">Nueva comida</button></div><div id="mealStatus" class="status"></div></div>`;
+  $("food").innerHTML = `${weekNavHtml()}<div id="foodWeek"></div><div class="card" id="mealForm"><div class="edit-banner"><div><div class="muted" id="mealEditingDate">${tr("newMeal")}</div><div id="mealEditingSummary" class="status"></div></div><button class="btn mini hide" id="cancelMealEdit">${tr("cancelEdit")}</button></div><h2>${tr("food")}</h2><input id="mealEditIndex" type="hidden"><div class="grid"><label>Fecha<input id="mealDate" type="date" value="${today()}"></label><label>Tipo<select id="mealType">${mealOptions}</select></label><label>Hora aprox.<input id="mealTime" placeholder="13:30"></label></div><div class="photo-actions"><label class="photo-btn">Foto antes<input id="mealBefore" type="file" accept="image/*"></label><label class="photo-btn optional">Foto despues<input id="mealAfter" type="file" accept="image/*"></label></div><label>Items / descripcion<textarea id="mealItems" placeholder="pollo con arroz&#10;ensalada&#10;agua"></textarea></label><label>Notas para estimacion<textarea id="mealNotes" placeholder="Sobro media porcion. La foto despues muestra lo que no comi."></textarea></label><div class="card status">Vista semanal en lectura. Usa Editar solo para corregir una entrada. Kcal y proteina quedan para ChatGPT.</div><div class="actions"><button class="btn" id="saveMeal">${tr("saveMeal")}</button><button class="btn" id="newMeal">${tr("newMeal")}</button></div><div id="mealStatus" class="status"></div></div>`;
   $("saveMeal").onclick = saveMeal;
   $("newMeal").onclick = clearMealForm;
+  $("cancelMealEdit").onclick = clearMealForm;
   renderFoodWeek();
   bindWeekNav($("food"));
 }
@@ -483,7 +520,8 @@ function mealLabel(value) {
 }
 
 function clearMealForm() {
-  $("mealEditingDate").textContent = "Nueva comida";
+  $("mealEditingDate").textContent = tr("newMeal");
+  $("mealEditingSummary").textContent = "";
   $("mealDate").value = today();
   $("mealEditIndex").value = "";
   $("mealType").value = "breakfast";
@@ -492,13 +530,16 @@ function clearMealForm() {
   $("mealAfter").value = "";
   $("mealItems").value = "";
   $("mealNotes").value = "";
+  $("saveMeal").textContent = tr("saveMeal");
+  $("cancelMealEdit").classList.add("hide");
   $("mealStatus").textContent = "";
 }
 
 function editMeal(date, index) {
   const meal = weekNutrition[date]?.meals?.[index];
   if (!meal) return;
-  $("mealEditingDate").textContent = `Editando ${date}`;
+  $("mealEditingDate").textContent = `${tr("editingMeal")} ${date}`;
+  $("mealEditingSummary").textContent = `${mealLabel(meal.meal)} ${meal.time_approx || ""}`.trim();
   $("mealDate").value = date;
   $("mealEditIndex").value = index;
   $("mealType").value = meal.meal || "breakfast";
@@ -507,7 +548,8 @@ function editMeal(date, index) {
   $("mealNotes").value = meal.notes || "";
   $("mealBefore").value = "";
   $("mealAfter").value = "";
-  $("saveMeal").textContent = "Guardar cambios";
+  $("saveMeal").textContent = tr("saveChanges");
+  $("cancelMealEdit").classList.remove("hide");
   $("mealStatus").textContent = "Editando comida existente. Las fotos actuales se conservan si no subes nuevas.";
   $("mealForm").scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -560,15 +602,17 @@ function renderReport() {
   const latest = state?.latest_workout;
   const pending = pendingMeals();
   const prompt = "procesa comidas pendientes";
-  $("report").innerHTML = `<div class="card"><h2>Ultimo sync</h2><div class="status">${state?.generated_at || "Sin snapshot cargado"}</div>${latest ? `<p><span class="pill">${latest.date}</span><span class="pill">${latest.perceived_effort || "unknown"}</span></p><div>${latest.exercises?.filter((x) => x.done).length || 0}/${latest.exercises?.length || 0} ejercicios hechos</div>` : ""}</div><div class="card"><h2>Pendiente para ChatGPT</h2><p><span class="pill">${pending.length} comidas</span></p>${pending.length ? pending.map(({ date, meal }) => `<div class="meal-read"><div><div class="name">${date} · ${mealLabel(meal.meal)} ${meal.time_approx || ""}</div><div class="dose">${(meal.items || []).map((item) => item.name).filter(Boolean).join(", ") || "Sin descripcion"}</div><div class="muted">${meal.photos?.before_path ? "foto antes" : "sin foto antes"}${meal.photos?.after_path ? " · foto despues" : ""}</div></div></div>`).join("") : `<div class="status">No hay comidas pendientes en la semana visible.</div>`}<div class="actions"><button class="btn" id="copyPendingPrompt">Copiar pedido</button></div><div class="status">Pedido: <code>${prompt}</code></div><div id="copyStatus" class="status"></div></div>`;
+  const dates = weekDates();
+  $("report").innerHTML = `${weekNavHtml()}<div class="card"><h2>Ultimo sync</h2><div class="status">${state?.generated_at || "Sin snapshot cargado"}</div>${latest ? `<p><span class="pill">${latest.date}</span><span class="pill">${latest.perceived_effort || "unknown"}</span></p><div>${latest.exercises?.filter((x) => x.done).length || 0}/${latest.exercises?.length || 0} ejercicios hechos</div>` : ""}</div><div class="card"><h2>${tr("pendingForChatGPT")}</h2><div class="status">${tr("weekScope")}: ${dates[0][2]} al ${dates[6][2]}</div><p><span class="pill">${pending.length} comidas</span></p>${pending.length ? pending.map(({ date, meal }) => `<div class="meal-read"><div><div class="name">${date} · ${mealLabel(meal.meal)} ${meal.time_approx || ""}</div><div class="dose">${(meal.items || []).map((item) => item.name).filter(Boolean).join(", ") || "Sin descripcion"}</div><div class="muted">${meal.photos?.before_path ? "foto antes" : "sin foto antes"}${meal.photos?.after_path ? " · foto despues" : ""}</div></div></div>`).join("") : `<div class="status">${tr("noPending")}</div>`}<div class="actions"><button class="btn" id="copyPendingPrompt">${tr("copyPrompt")}</button></div><div class="status">Pedido: <code>${prompt}</code></div><div id="copyStatus" class="status"></div></div>`;
+  bindWeekNav($("report"));
   $("copyPendingPrompt").onclick = async () => {
     await navigator.clipboard.writeText(prompt);
-    $("copyStatus").textContent = "Pedido copiado.";
+    $("copyStatus").textContent = tr("promptCopied");
   };
 }
 
 function renderSettings() {
-  $("settings").innerHTML = `<div class="card"><h2>${tr("privateGithub")}</h2><div class="grid"><label>${tr("owner")}<input id="owner" value="${settings.owner || ""}"></label><label>${tr("repo")}<input id="repo" value="${settings.repo || "personal-trainer"}"></label><label>${tr("branch")}<input id="branch" value="${settings.branch || "main"}"></label><label>${tr("token")}<input id="token" type="password" placeholder="${settings.token_cipher ? tr("tokenSaved") : ""}" value="${settings.token || ""}"></label><label>${tr("passphrase")}<input id="passphrase" type="password" placeholder="${tr("notSaved")}"></label></div><details class="faq"><summary><span class="info-icon">i</span>${tr("faqTitle")}</summary><p>${tr("faqBody")}</p></details><h2>${tr("preferences")}</h2><div class="grid"><label>${tr("palette")}<select id="palette"><option value="dark">Dark</option><option value="light">Light</option><option value="forest">Forest</option></select></label><label>${tr("language")}<select id="language"><option value="es">Espanol</option><option value="en">English</option></select></label></div><div class="actions"><button class="btn" id="saveSettings">${tr("saveSettings")}</button><button class="btn" id="unlockSettings">${tr("unlock")}</button><button class="btn" id="loadData">${tr("loadData")}</button></div><div id="settingsStatus" class="status"></div></div>`;
+  $("settings").innerHTML = `<div class="card"><h2>${tr("privateGithub")}</h2>${settings.token ? `<div class="status bad">${tr("plainTokenWarning")}</div>` : ""}<div class="grid"><label>${tr("owner")}<input id="owner" value="${settings.owner || ""}"></label><label>${tr("repo")}<input id="repo" value="${settings.repo || "personal-trainer"}"></label><label>${tr("branch")}<input id="branch" value="${settings.branch || "main"}"></label><label>${tr("token")}<input id="token" type="password" placeholder="${settings.token_cipher ? tr("tokenSaved") : ""}" value=""></label><label>${tr("passphrase")}<input id="passphrase" type="password" placeholder="${tr("notSaved")}"></label></div><details class="faq"><summary><span class="info-icon">i</span>${tr("faqTitle")}</summary><p>${tr("faqBody")}</p></details><h2>${tr("preferences")}</h2><div class="grid"><label>${tr("palette")}<select id="palette"><option value="dark">Dark</option><option value="light">Light</option><option value="forest">Forest</option></select></label><label>${tr("language")}<select id="language"><option value="es">Espanol</option><option value="en">English</option></select></label></div><div class="status">${tr("partialLanguage")}</div><div class="actions"><button class="btn" id="saveSettings">${tr("saveSettings")}</button><button class="btn" id="unlockSettings">${tr("unlock")}</button><button class="btn" id="loadData">${tr("loadData")}</button></div><div id="settingsStatus" class="status"></div></div>`;
   $("palette").value = settings.palette || "dark";
   $("language").value = settings.language || "es";
   $("saveSettings").onclick = async () => {
@@ -581,24 +625,29 @@ function renderSettings() {
       palette: $("palette").value,
       language: $("language").value,
     };
-    if (rawToken && passphrase) {
-      const encrypted = await encryptToken(rawToken, passphrase);
+    const willEncryptToken = !!((rawToken || settings.token) && passphrase);
+    if (rawToken && !passphrase) {
+      $("settingsStatus").textContent = tr("tokenNeedsPassphrase");
+      $("settingsStatus").classList.add("bad");
+      return;
+    }
+    if (willEncryptToken) {
+      const encrypted = await encryptToken(rawToken || settings.token, passphrase);
       Object.assign(next, {
         token_cipher: encrypted.cipher,
         token_salt: encrypted.salt,
         token_iv: encrypted.iv,
       });
-      token = rawToken;
+      token = rawToken || settings.token;
       sessionStorage.setItem("pt_session_token", token);
-    } else if (rawToken) {
-      next.token = rawToken;
-      token = rawToken;
     } else if (settings.token_cipher) {
       Object.assign(next, {
         token_cipher: settings.token_cipher,
         token_salt: settings.token_salt,
         token_iv: settings.token_iv,
       });
+    } else if (settings.token) {
+      next.token = settings.token;
     }
     saveSettings(next);
     renderToday();
@@ -606,7 +655,7 @@ function renderSettings() {
     renderFood();
     renderReport();
     renderSettings();
-    $("settingsStatus").textContent = rawToken && passphrase ? tr("savedEncrypted") : tr("saved");
+    $("settingsStatus").textContent = willEncryptToken ? tr("savedEncrypted") : tr("saved");
   };
   $("unlockSettings").onclick = async () => {
     try {
@@ -645,13 +694,14 @@ async function changeWeek(days, reset = false) {
   await loadVisibleWeek();
   renderWeek();
   renderFood();
+  renderReport();
 }
 
 async function loadData() {
   const status = $("settingsStatus") || $("subtitle");
   try {
     if (!token) throw new Error("Desbloquea o guarda el token primero.");
-    status.textContent = "Cargando GitHub...";
+    status.textContent = tr("loadingGithub");
     if (!exerciseDb.length) {
       exerciseDb = await fetch(DATA_URL).then((res) => (res.ok ? res.json() : []));
     }
@@ -660,7 +710,7 @@ async function loadData() {
     state = await getJson("data/import/current-state.json", null);
     todayWorkout = await getJson(`data/import/workouts/${today()}.json`, null);
     await loadVisibleWeek();
-    status.textContent = "Datos cargados.";
+    status.textContent = tr("dataLoaded");
     renderToday();
     renderWeek();
     renderFood();
@@ -766,5 +816,5 @@ renderWeek();
 renderFood();
 renderReport();
 renderSettings();
-if (settings.token) loadData();
+if (token) loadData();
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(console.warn);
