@@ -62,6 +62,7 @@ let todayWorkout = null;
 let weekWorkouts = {};
 let weekNutrition = {};
 let exerciseDb = [];
+let visibleWeekStart = null;
 
 const $ = (id) => document.getElementById(id);
 const today = () => {
@@ -86,11 +87,18 @@ function addDays(dateText, days) {
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
 }
-function weekDates() {
+function currentWeekStart() {
   const current = localDate(today());
   const mondayOffset = (current.getUTCDay() + 6) % 7;
-  const monday = addDays(today(), -mondayOffset);
+  return addDays(today(), -mondayOffset);
+}
+function weekDates() {
+  const monday = visibleWeekStart || currentWeekStart();
   return WEEKDAYS.map((day, index) => [...day, addDays(monday, index)]);
+}
+function weekNavHtml() {
+  const dates = weekDates();
+  return `<div class="week-nav"><button class="btn" data-week-shift="-7">‹</button><div><b>${dates[0][2]}</b><div class="muted">al ${dates[6][2]}</div></div><button class="btn" data-week-shift="7">›</button><button class="btn" data-week-today="1">Hoy</button></div>`;
 }
 const headers = () => ({
   Accept: "application/vnd.github+json",
@@ -311,7 +319,7 @@ function renderWeek() {
     root.innerHTML = `<div class="card status">Carga datos desde Settings para ver el programa semanal.</div>`;
     return;
   }
-  root.innerHTML = "";
+  root.innerHTML = weekNavHtml();
   weekDates().forEach(([key, label, date]) => {
     const workout = weekWorkouts[date];
     const planned = plan.weekly_structure?.[key] || [];
@@ -354,6 +362,7 @@ function renderWeek() {
     });
     root.append(card);
   });
+  bindWeekNav(root);
 }
 
 function exerciseRow(ex) {
@@ -388,10 +397,11 @@ function exerciseRow(ex) {
 
 function renderFood() {
   const mealOptions = MEAL_TYPES.map(([value, label]) => `<option value="${value}">${label}</option>`).join("");
-  $("food").innerHTML = `<div id="foodWeek"></div><div class="card" id="mealForm"><div class="muted" id="mealEditingDate">Nueva comida</div><h2>Comida</h2><input id="mealEditIndex" type="hidden"><div class="grid"><label>Fecha<input id="mealDate" type="date" value="${today()}"></label><label>Tipo<select id="mealType">${mealOptions}</select></label><label>Hora aprox.<input id="mealTime" placeholder="13:30"></label></div><div class="photo-actions"><label class="photo-btn">Foto antes<input id="mealBefore" type="file" accept="image/*"></label><label class="photo-btn optional">Foto despues<input id="mealAfter" type="file" accept="image/*"></label></div><label>Items / descripcion<textarea id="mealItems" placeholder="pollo con arroz&#10;ensalada&#10;agua"></textarea></label><label>Notas para estimacion<textarea id="mealNotes" placeholder="Sobro media porcion. La foto despues muestra lo que no comi."></textarea></label><div class="card status">Vista semanal en lectura. Usa Editar solo para corregir una entrada. Kcal y proteina quedan para ChatGPT.</div><div class="actions"><button class="btn" id="saveMeal">Guardar comida</button><button class="btn" id="newMeal">Nueva comida</button></div><div id="mealStatus" class="status"></div></div>`;
+  $("food").innerHTML = `${weekNavHtml()}<div id="foodWeek"></div><div class="card" id="mealForm"><div class="muted" id="mealEditingDate">Nueva comida</div><h2>Comida</h2><input id="mealEditIndex" type="hidden"><div class="grid"><label>Fecha<input id="mealDate" type="date" value="${today()}"></label><label>Tipo<select id="mealType">${mealOptions}</select></label><label>Hora aprox.<input id="mealTime" placeholder="13:30"></label></div><div class="photo-actions"><label class="photo-btn">Foto antes<input id="mealBefore" type="file" accept="image/*"></label><label class="photo-btn optional">Foto despues<input id="mealAfter" type="file" accept="image/*"></label></div><label>Items / descripcion<textarea id="mealItems" placeholder="pollo con arroz&#10;ensalada&#10;agua"></textarea></label><label>Notas para estimacion<textarea id="mealNotes" placeholder="Sobro media porcion. La foto despues muestra lo que no comi."></textarea></label><div class="card status">Vista semanal en lectura. Usa Editar solo para corregir una entrada. Kcal y proteina quedan para ChatGPT.</div><div class="actions"><button class="btn" id="saveMeal">Guardar comida</button><button class="btn" id="newMeal">Nueva comida</button></div><div id="mealStatus" class="status"></div></div>`;
   $("saveMeal").onclick = saveMeal;
   $("newMeal").onclick = clearMealForm;
   renderFoodWeek();
+  bindWeekNav($("food"));
 }
 
 function mealLabel(value) {
@@ -455,6 +465,15 @@ function renderFoodWeek() {
   });
 }
 
+function bindWeekNav(root) {
+  root.querySelectorAll("[data-week-shift]").forEach((button) => {
+    button.onclick = () => changeWeek(Number(button.dataset.weekShift));
+  });
+  root.querySelectorAll("[data-week-today]").forEach((button) => {
+    button.onclick = () => changeWeek(0, true);
+  });
+}
+
 function renderReport() {
   const latest = state?.latest_workout;
   $("report").innerHTML = `<div class="card"><h2>Ultimo sync</h2><div class="status">${state?.generated_at || "Sin snapshot cargado"}</div>${latest ? `<p><span class="pill">${latest.date}</span><span class="pill">${latest.perceived_effort || "unknown"}</span></p><div>${latest.exercises?.filter((x) => x.done).length || 0}/${latest.exercises?.length || 0} ejercicios hechos</div>` : ""}</div>`;
@@ -504,6 +523,33 @@ function renderSettings() {
   $("loadData").onclick = loadData;
 }
 
+async function loadVisibleWeek() {
+  weekWorkouts = Object.fromEntries(
+    await Promise.all(
+      weekDates().map(async ([, , date]) => [
+        date,
+        await getJson(`data/import/workouts/${date}.json`, null),
+      ]),
+    ),
+  );
+  weekNutrition = Object.fromEntries(
+    await Promise.all(
+      weekDates().map(async ([, , date]) => [
+        date,
+        await getJson(`data/nutrition/${date}.json`, null),
+      ]),
+    ),
+  );
+}
+
+async function changeWeek(days, reset = false) {
+  if (!token) return;
+  visibleWeekStart = reset ? currentWeekStart() : addDays(visibleWeekStart || currentWeekStart(), days);
+  await loadVisibleWeek();
+  renderWeek();
+  renderFood();
+}
+
 async function loadData() {
   const status = $("settingsStatus") || $("subtitle");
   try {
@@ -512,25 +558,11 @@ async function loadData() {
     if (!exerciseDb.length) {
       exerciseDb = await fetch(DATA_URL).then((res) => (res.ok ? res.json() : []));
     }
+    visibleWeekStart ||= currentWeekStart();
     plan = await getJson("data/current-plan.json");
     state = await getJson("data/import/current-state.json", null);
     todayWorkout = await getJson(`data/import/workouts/${today()}.json`, null);
-    weekWorkouts = Object.fromEntries(
-      await Promise.all(
-        weekDates().map(async ([, , date]) => [
-          date,
-          await getJson(`data/import/workouts/${date}.json`, null),
-        ]),
-      ),
-    );
-    weekNutrition = Object.fromEntries(
-      await Promise.all(
-        weekDates().map(async ([, , date]) => [
-          date,
-          await getJson(`data/nutrition/${date}.json`, null),
-        ]),
-      ),
-    );
+    await loadVisibleWeek();
     status.textContent = "Datos cargados.";
     renderToday();
     renderWeek();
