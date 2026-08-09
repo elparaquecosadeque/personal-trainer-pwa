@@ -18,5 +18,6 @@ La primera vez, abre Settings y guarda:
 - Branch: `main`.
 - Token: fine-grained PAT limitado a ese repo con `Contents: read and write`.
 
-El token se guarda solo en `localStorage` del dispositivo.
+Si guardas una passphrase, el token se cifra en `localStorage` y se desbloquea solo para la sesion actual.
 
+Las fotos de comida se comprimen en el navegador y se suben al repo privado en `data/media/nutrition/YYYY-MM-DD/`.

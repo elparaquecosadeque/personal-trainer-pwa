@@ -48,6 +48,7 @@ const WEEKDAYS = [
 ];
 
 let settings = JSON.parse(localStorage.getItem(STORE) || "{}");
+let token = settings.token || sessionStorage.getItem("pt_session_token") || "";
 let plan = null;
 let state = null;
 let todayWorkout = null;
@@ -69,7 +70,7 @@ const weekdayKey = () =>
     .toLowerCase();
 const headers = () => ({
   Accept: "application/vnd.github+json",
-  Authorization: `Bearer ${settings.token}`,
+  Authorization: `Bearer ${token}`,
   "X-GitHub-Api-Version": "2022-11-28",
 });
 const api = (path) =>
@@ -106,6 +107,49 @@ function saveSettings(next) {
   localStorage.setItem(STORE, JSON.stringify(settings));
 }
 
+async function keyFromPassphrase(passphrase, salt) {
+  const baseKey = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(passphrase),
+    "PBKDF2",
+    false,
+    ["deriveKey"],
+  );
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations: 250000, hash: "SHA-256" },
+    baseKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"],
+  );
+}
+
+const bytesToB64 = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes)));
+const b64ToBytes = (text) => Uint8Array.from(atob(text), (char) => char.charCodeAt(0));
+
+async function encryptToken(rawToken, passphrase) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await keyFromPassphrase(passphrase, salt);
+  const cipher = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    new TextEncoder().encode(rawToken),
+  );
+  return { cipher: bytesToB64(cipher), salt: bytesToB64(salt), iv: bytesToB64(iv) };
+}
+
+async function unlockToken(passphrase) {
+  const key = await keyFromPassphrase(passphrase, b64ToBytes(settings.token_salt));
+  const plain = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: b64ToBytes(settings.token_iv) },
+    key,
+    b64ToBytes(settings.token_cipher),
+  );
+  token = new TextDecoder().decode(plain);
+  sessionStorage.setItem("pt_session_token", token);
+}
+
 async function getJson(path, fallback = null) {
   const res = await fetch(`${api(path)}?ref=${encodeURIComponent(settings.branch || "main")}`, {
     headers: headers(),
@@ -133,6 +177,37 @@ async function putJson(path, obj, message) {
     }),
   });
   if (!res.ok) throw new Error(`${path}: ${res.status} ${await res.text()}`);
+}
+
+async function putBase64(path, content, message) {
+  let sha;
+  const current = await fetch(`${api(path)}?ref=${encodeURIComponent(settings.branch || "main")}`, {
+    headers: headers(),
+  });
+  if (current.ok) sha = (await current.json()).sha;
+  const res = await fetch(api(path), {
+    method: "PUT",
+    headers: { ...headers(), "Content-Type": "application/json" },
+    body: JSON.stringify({ branch: settings.branch || "main", message, content, sha }),
+  });
+  if (!res.ok) throw new Error(`${path}: ${res.status} ${await res.text()}`);
+}
+
+function imageToJpeg(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, 1280 / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", 0.75).split(",")[1]);
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
 }
 
 function sessionExercises(id) {
@@ -178,7 +253,7 @@ function groupedExercises(workout) {
 
 function renderToday() {
   const root = $("today");
-  if (!settings.token) {
+  if (!token) {
     root.innerHTML = `<div class="card status bad">Configura GitHub en Settings primero.</div>`;
     return;
   }
@@ -261,7 +336,7 @@ function exerciseRow(ex) {
 }
 
 function renderFood() {
-  $("food").innerHTML = `<div class="card"><div class="muted">${today()}</div><h2>Comida</h2><div class="grid"><label>Tipo<select id="mealType"><option>breakfast</option><option>lunch</option><option>dinner</option><option>snack</option><option>dessert</option></select></label><label>Hora aprox.<input id="mealTime" placeholder="13:30"></label></div><label>Items / descripcion<textarea id="mealItems" placeholder="pollo con arroz&#10;ensalada&#10;agua"></textarea></label><label>Notas para estimacion<textarea id="mealNotes" placeholder="Foto enviada a ChatGPT. Sobro media porcion."></textarea></label><div class="card status">Kcal y proteina quedan para estimacion posterior de ChatGPT; no los calcules a mano aqui.</div><div class="actions"><button class="btn" id="saveMeal">Guardar comida</button></div><div id="mealStatus" class="status"></div></div>`;
+  $("food").innerHTML = `<div class="card"><div class="muted">${today()}</div><h2>Comida</h2><div class="grid"><label>Tipo<select id="mealType"><option>breakfast</option><option>lunch</option><option>dinner</option><option>snack</option><option>dessert</option></select></label><label>Hora aprox.<input id="mealTime" placeholder="13:30"></label></div><label>Foto antes<input id="mealBefore" type="file" accept="image/*"></label><label>Foto despues opcional<input id="mealAfter" type="file" accept="image/*"></label><label>Items / descripcion<textarea id="mealItems" placeholder="pollo con arroz&#10;ensalada&#10;agua"></textarea></label><label>Notas para estimacion<textarea id="mealNotes" placeholder="Sobro media porcion. La foto despues muestra lo que no comi."></textarea></label><div class="card status">Las fotos se suben comprimidas al repo privado. Kcal y proteina quedan para estimacion posterior de ChatGPT.</div><div class="actions"><button class="btn" id="saveMeal">Guardar comida</button></div><div id="mealStatus" class="status"></div></div>`;
   $("saveMeal").onclick = saveMeal;
 }
 
@@ -271,15 +346,45 @@ function renderReport() {
 }
 
 function renderSettings() {
-  $("settings").innerHTML = `<div class="card"><h2>GitHub privado</h2><div class="grid"><label>Owner<input id="owner" value="${settings.owner || ""}"></label><label>Repo<input id="repo" value="${settings.repo || "personal-trainer"}"></label><label>Branch<input id="branch" value="${settings.branch || "main"}"></label><label>Token<input id="token" type="password" value="${settings.token || ""}"></label></div><div class="actions"><button class="btn" id="saveSettings">Guardar settings</button><button class="btn" id="loadData">Cargar datos</button></div><div id="settingsStatus" class="status"></div></div>`;
-  $("saveSettings").onclick = () => {
-    saveSettings({
+  $("settings").innerHTML = `<div class="card"><h2>GitHub privado</h2><div class="grid"><label>Owner<input id="owner" value="${settings.owner || ""}"></label><label>Repo<input id="repo" value="${settings.repo || "personal-trainer"}"></label><label>Branch<input id="branch" value="${settings.branch || "main"}"></label><label>Token<input id="token" type="password" placeholder="${settings.token_cipher ? "Token cifrado guardado" : ""}" value="${settings.token || ""}"></label><label>Passphrase local<input id="passphrase" type="password" placeholder="No se guarda"></label></div><div class="actions"><button class="btn" id="saveSettings">Guardar settings</button><button class="btn" id="unlockSettings">Desbloquear</button><button class="btn" id="loadData">Cargar datos</button></div><div id="settingsStatus" class="status"></div></div>`;
+  $("saveSettings").onclick = async () => {
+    const rawToken = $("token").value.trim();
+    const passphrase = $("passphrase").value;
+    const next = {
       owner: $("owner").value.trim(),
       repo: $("repo").value.trim(),
       branch: $("branch").value.trim() || "main",
-      token: $("token").value.trim(),
-    });
-    $("settingsStatus").textContent = "Settings guardados.";
+    };
+    if (rawToken && passphrase) {
+      const encrypted = await encryptToken(rawToken, passphrase);
+      Object.assign(next, {
+        token_cipher: encrypted.cipher,
+        token_salt: encrypted.salt,
+        token_iv: encrypted.iv,
+      });
+      token = rawToken;
+      sessionStorage.setItem("pt_session_token", token);
+    } else if (rawToken) {
+      next.token = rawToken;
+      token = rawToken;
+    } else if (settings.token_cipher) {
+      Object.assign(next, {
+        token_cipher: settings.token_cipher,
+        token_salt: settings.token_salt,
+        token_iv: settings.token_iv,
+      });
+    }
+    saveSettings(next);
+    $("settingsStatus").textContent = rawToken && passphrase ? "Settings guardados con token cifrado." : "Settings guardados.";
+  };
+  $("unlockSettings").onclick = async () => {
+    try {
+      await unlockToken($("passphrase").value);
+      $("settingsStatus").textContent = "Token desbloqueado para esta sesion.";
+    } catch {
+      $("settingsStatus").textContent = "Passphrase incorrecta.";
+      $("settingsStatus").classList.add("bad");
+    }
   };
   $("loadData").onclick = loadData;
 }
@@ -287,6 +392,7 @@ function renderSettings() {
 async function loadData() {
   const status = $("settingsStatus") || $("subtitle");
   try {
+    if (!token) throw new Error("Desbloquea o guarda el token primero.");
     status.textContent = "Cargando GitHub...";
     if (!exerciseDb.length) {
       exerciseDb = await fetch(DATA_URL).then((res) => (res.ok ? res.json() : []));
@@ -328,12 +434,31 @@ async function saveMeal() {
       meals: [],
       notes: "",
     });
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const photos = {};
+    if ($("mealBefore").files[0]) {
+      photos.before_path = `data/media/nutrition/${today()}/${stamp}-before.jpg`;
+      await putBase64(
+        photos.before_path,
+        await imageToJpeg($("mealBefore").files[0]),
+        `Upload meal before photo ${today()}`,
+      );
+    }
+    if ($("mealAfter").files[0]) {
+      photos.after_path = `data/media/nutrition/${today()}/${stamp}-after.jpg`;
+      await putBase64(
+        photos.after_path,
+        await imageToJpeg($("mealAfter").files[0]),
+        `Upload meal after photo ${today()}`,
+      );
+    }
     const meal = {
       meal: $("mealType").value,
       time_approx: $("mealTime").value || null,
       time_accuracy: $("mealTime").value ? "user_entered" : "unknown",
       items: $("mealItems").value.split("\n").filter(Boolean).map((name) => ({ name })),
       notes: $("mealNotes").value || null,
+      photos,
       estimate_status: "pending_chatgpt",
     };
     existing.meals.push(meal);
