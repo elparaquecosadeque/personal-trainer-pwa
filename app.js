@@ -37,6 +37,15 @@ const SPECIAL = {
   weighted_walk_am: [["weighted walking", "Caminata con peso", "30-45 min", "duration_load"]],
   rest_or_swim_or_optional_weighted_walk: [["swimming freestyle", "Natacion o descanso", "suave", "duration"]],
 };
+const WEEKDAYS = [
+  ["monday", "Lunes"],
+  ["tuesday", "Martes"],
+  ["wednesday", "Miercoles"],
+  ["thursday", "Jueves"],
+  ["friday", "Viernes"],
+  ["saturday", "Sabado"],
+  ["sunday", "Domingo"],
+];
 
 let settings = JSON.parse(localStorage.getItem(STORE) || "{}");
 let plan = null;
@@ -197,6 +206,30 @@ function renderToday() {
   };
 }
 
+function renderWeek() {
+  const root = $("week");
+  if (!plan) {
+    root.innerHTML = `<div class="card status">Carga datos desde Settings para ver el programa semanal.</div>`;
+    return;
+  }
+  root.innerHTML = "";
+  WEEKDAYS.forEach(([key, label]) => {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `<h2>${label}</h2>`;
+    (plan.weekly_structure?.[key] || []).forEach((id) => {
+      const session = document.createElement("div");
+      session.innerHTML = `<h3>${SESSION_META[id] || id}</h3><div class="muted">${plan.session_notes?.[id] || ""}</div>`;
+      sessionExercises(id).forEach(([lookup, name, target, kind]) => {
+        const media = mediaFor({ lookup, name });
+        session.innerHTML += `<div class="row"><div>${media ? `<img class="media" src="${media}" alt="${name}" loading="lazy">` : ""}<div class="name">${name}</div><div class="dose">${target || ""}</div><span class="pill">${kind}</span></div></div>`;
+      });
+      card.append(session);
+    });
+    root.append(card);
+  });
+}
+
 function exerciseRow(ex) {
   const row = document.createElement("div");
   row.className = "row";
@@ -228,7 +261,7 @@ function exerciseRow(ex) {
 }
 
 function renderFood() {
-  $("food").innerHTML = `<div class="card"><div class="muted">${today()}</div><h2>Comida</h2><div class="grid"><label>Tipo<select id="mealType"><option>breakfast</option><option>lunch</option><option>dinner</option><option>snack</option><option>dessert</option></select></label><label>Hora aprox.<input id="mealTime" placeholder="13:30"></label></div><label>Items<textarea id="mealItems" placeholder="pollo 200g&#10;arroz 1 taza&#10;agua"></textarea></label><div class="grid"><label>Kcal aprox.<input id="mealKcal" inputmode="numeric"></label><label>Proteina g aprox.<input id="mealProtein" inputmode="numeric"></label></div><div class="actions"><button class="btn" id="saveMeal">Guardar comida</button></div><div id="mealStatus" class="status"></div></div>`;
+  $("food").innerHTML = `<div class="card"><div class="muted">${today()}</div><h2>Comida</h2><div class="grid"><label>Tipo<select id="mealType"><option>breakfast</option><option>lunch</option><option>dinner</option><option>snack</option><option>dessert</option></select></label><label>Hora aprox.<input id="mealTime" placeholder="13:30"></label></div><label>Items / descripcion<textarea id="mealItems" placeholder="pollo con arroz&#10;ensalada&#10;agua"></textarea></label><label>Notas para estimacion<textarea id="mealNotes" placeholder="Foto enviada a ChatGPT. Sobro media porcion."></textarea></label><div class="card status">Kcal y proteina quedan para estimacion posterior de ChatGPT; no los calcules a mano aqui.</div><div class="actions"><button class="btn" id="saveMeal">Guardar comida</button></div><div id="mealStatus" class="status"></div></div>`;
   $("saveMeal").onclick = saveMeal;
 }
 
@@ -263,6 +296,7 @@ async function loadData() {
     todayWorkout = await getJson(`data/import/workouts/${today()}.json`, null);
     status.textContent = "Datos cargados.";
     renderToday();
+    renderWeek();
     renderReport();
   } catch (err) {
     status.textContent = err.message;
@@ -299,8 +333,8 @@ async function saveMeal() {
       time_approx: $("mealTime").value || null,
       time_accuracy: $("mealTime").value ? "user_entered" : "unknown",
       items: $("mealItems").value.split("\n").filter(Boolean).map((name) => ({ name })),
-      estimated_kcal: $("mealKcal").value ? Number($("mealKcal").value) : null,
-      estimated_protein_g: $("mealProtein").value ? Number($("mealProtein").value) : null,
+      notes: $("mealNotes").value || null,
+      estimate_status: "pending_chatgpt",
     };
     existing.meals.push(meal);
     await putJson(`data/nutrition/${today()}.json`, existing, `Log nutrition ${today()}`);
@@ -335,6 +369,7 @@ document.querySelectorAll(".tab").forEach((tab) => {
 });
 
 renderToday();
+renderWeek();
 renderFood();
 renderReport();
 renderSettings();
