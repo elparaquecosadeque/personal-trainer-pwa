@@ -21,3 +21,5 @@ La primera vez, abre Settings y guarda:
 Si guardas una passphrase, el token se cifra en `localStorage` y se desbloquea solo para la sesion actual.
 
 Las fotos de comida se comprimen en el navegador y se suben al repo privado en `data/media/nutrition/YYYY-MM-DD/`.
+
+La pestaña Reporte muestra comidas pendientes y copia el pedido `procesa comidas pendientes` para usarlo con una tarea programada de ChatGPT Plus.

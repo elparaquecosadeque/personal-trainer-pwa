@@ -474,9 +474,23 @@ function bindWeekNav(root) {
   });
 }
 
+function pendingMeals() {
+  return Object.entries(weekNutrition).flatMap(([date, day]) =>
+    (day?.meals || [])
+      .map((meal, index) => ({ date, meal, index }))
+      .filter(({ meal }) => meal.estimate_status === "pending_chatgpt"),
+  );
+}
+
 function renderReport() {
   const latest = state?.latest_workout;
-  $("report").innerHTML = `<div class="card"><h2>Ultimo sync</h2><div class="status">${state?.generated_at || "Sin snapshot cargado"}</div>${latest ? `<p><span class="pill">${latest.date}</span><span class="pill">${latest.perceived_effort || "unknown"}</span></p><div>${latest.exercises?.filter((x) => x.done).length || 0}/${latest.exercises?.length || 0} ejercicios hechos</div>` : ""}</div>`;
+  const pending = pendingMeals();
+  const prompt = "procesa comidas pendientes";
+  $("report").innerHTML = `<div class="card"><h2>Ultimo sync</h2><div class="status">${state?.generated_at || "Sin snapshot cargado"}</div>${latest ? `<p><span class="pill">${latest.date}</span><span class="pill">${latest.perceived_effort || "unknown"}</span></p><div>${latest.exercises?.filter((x) => x.done).length || 0}/${latest.exercises?.length || 0} ejercicios hechos</div>` : ""}</div><div class="card"><h2>Pendiente para ChatGPT</h2><p><span class="pill">${pending.length} comidas</span></p>${pending.length ? pending.map(({ date, meal }) => `<div class="meal-read"><div><div class="name">${date} · ${mealLabel(meal.meal)} ${meal.time_approx || ""}</div><div class="dose">${(meal.items || []).map((item) => item.name).filter(Boolean).join(", ") || "Sin descripcion"}</div><div class="muted">${meal.photos?.before_path ? "foto antes" : "sin foto antes"}${meal.photos?.after_path ? " · foto despues" : ""}</div></div></div>`).join("") : `<div class="status">No hay comidas pendientes en la semana visible.</div>`}<div class="actions"><button class="btn" id="copyPendingPrompt">Copiar pedido</button></div><div class="status">Pedido: <code>${prompt}</code></div><div id="copyStatus" class="status"></div></div>`;
+  $("copyPendingPrompt").onclick = async () => {
+    await navigator.clipboard.writeText(prompt);
+    $("copyStatus").textContent = "Pedido copiado.";
+  };
 }
 
 function renderSettings() {
