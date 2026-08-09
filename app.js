@@ -2,6 +2,66 @@ const STORE = "pt_public_pwa_settings";
 const TZ = "America/Lima";
 const DATA_URL = "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/data/exercises.json";
 const MEDIA_BASE = "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/";
+const TEXT = {
+  es: {
+    today: "Hoy",
+    week: "Semana",
+    food: "Comida",
+    report: "Reporte",
+    settings: "Settings",
+    subtitle: "PWA publica, datos privados en GitHub",
+    privateGithub: "GitHub privado",
+    owner: "Owner",
+    repo: "Repo",
+    branch: "Branch",
+    token: "Token",
+    passphrase: "Passphrase local",
+    preferences: "Preferencias",
+    palette: "Paleta",
+    language: "Idioma",
+    saveSettings: "Guardar settings",
+    unlock: "Desbloquear",
+    loadData: "Cargar datos",
+    faqTitle: "Como funciona el token",
+    faqBody:
+      "La app publica no contiene tus datos. Lee y escribe el repo privado solo cuando este navegador tiene tu PAT. Si usas passphrase, el PAT queda cifrado en localStorage y se desbloquea solo para esta sesion. La passphrase no se guarda.",
+    tokenSaved: "Token cifrado guardado",
+    notSaved: "No se guarda",
+    savedEncrypted: "Settings guardados con token cifrado.",
+    saved: "Settings guardados.",
+    unlocked: "Token desbloqueado para esta sesion.",
+    badPassphrase: "Passphrase incorrecta.",
+  },
+  en: {
+    today: "Today",
+    week: "Week",
+    food: "Food",
+    report: "Report",
+    settings: "Settings",
+    subtitle: "Public PWA, private data in GitHub",
+    privateGithub: "Private GitHub",
+    owner: "Owner",
+    repo: "Repo",
+    branch: "Branch",
+    token: "Token",
+    passphrase: "Local passphrase",
+    preferences: "Preferences",
+    palette: "Palette",
+    language: "Language",
+    saveSettings: "Save settings",
+    unlock: "Unlock",
+    loadData: "Load data",
+    faqTitle: "How token security works",
+    faqBody:
+      "The public app does not include your data. It reads and writes the private repo only when this browser has your PAT. With a passphrase, the PAT is encrypted in localStorage and unlocked only for this session. The passphrase is not stored.",
+    tokenSaved: "Encrypted token saved",
+    notSaved: "Not stored",
+    savedEncrypted: "Settings saved with encrypted token.",
+    saved: "Settings saved.",
+    unlocked: "Token unlocked for this session.",
+    badPassphrase: "Wrong passphrase.",
+  },
+};
 const SESSION_META = {
   lower_a_am: "Piernas A",
   upper_a_pm: "Torso A",
@@ -47,11 +107,11 @@ const WEEKDAYS = [
   ["sunday", "Domingo"],
 ];
 const MEAL_TYPES = [
-  ["breakfast", "Desayuno"],
-  ["lunch", "Almuerzo"],
-  ["dinner", "Cena"],
-  ["snack", "Snack"],
-  ["dessert", "Postre"],
+  ["breakfast", "Desayuno", "Breakfast"],
+  ["lunch", "Almuerzo", "Lunch"],
+  ["dinner", "Cena", "Dinner"],
+  ["snack", "Snack", "Snack"],
+  ["dessert", "Postre", "Dessert"],
 ];
 
 let settings = JSON.parse(localStorage.getItem(STORE) || "{}");
@@ -65,6 +125,7 @@ let exerciseDb = [];
 let visibleWeekStart = null;
 
 const $ = (id) => document.getElementById(id);
+const tr = (key) => TEXT[settings.language || "es"]?.[key] || TEXT.es[key] || key;
 const today = () => {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: TZ,
@@ -137,6 +198,16 @@ function mediaFor(ex) {
 function saveSettings(next) {
   settings = next;
   localStorage.setItem(STORE, JSON.stringify(settings));
+  applyPreferences();
+}
+
+function applyPreferences() {
+  document.documentElement.dataset.palette = settings.palette || "dark";
+  document.documentElement.lang = settings.language || "es";
+  $("subtitle").textContent = tr("subtitle");
+  document.querySelectorAll("[data-label]").forEach((node) => {
+    node.textContent = tr(node.dataset.label);
+  });
 }
 
 async function keyFromPassphrase(passphrase, salt) {
@@ -396,7 +467,9 @@ function exerciseRow(ex) {
 }
 
 function renderFood() {
-  const mealOptions = MEAL_TYPES.map(([value, label]) => `<option value="${value}">${label}</option>`).join("");
+  const mealOptions = MEAL_TYPES.map(
+    ([value, es, en]) => `<option value="${value}">${settings.language === "en" ? en : es}</option>`,
+  ).join("");
   $("food").innerHTML = `${weekNavHtml()}<div id="foodWeek"></div><div class="card" id="mealForm"><div class="muted" id="mealEditingDate">Nueva comida</div><h2>Comida</h2><input id="mealEditIndex" type="hidden"><div class="grid"><label>Fecha<input id="mealDate" type="date" value="${today()}"></label><label>Tipo<select id="mealType">${mealOptions}</select></label><label>Hora aprox.<input id="mealTime" placeholder="13:30"></label></div><div class="photo-actions"><label class="photo-btn">Foto antes<input id="mealBefore" type="file" accept="image/*"></label><label class="photo-btn optional">Foto despues<input id="mealAfter" type="file" accept="image/*"></label></div><label>Items / descripcion<textarea id="mealItems" placeholder="pollo con arroz&#10;ensalada&#10;agua"></textarea></label><label>Notas para estimacion<textarea id="mealNotes" placeholder="Sobro media porcion. La foto despues muestra lo que no comi."></textarea></label><div class="card status">Vista semanal en lectura. Usa Editar solo para corregir una entrada. Kcal y proteina quedan para ChatGPT.</div><div class="actions"><button class="btn" id="saveMeal">Guardar comida</button><button class="btn" id="newMeal">Nueva comida</button></div><div id="mealStatus" class="status"></div></div>`;
   $("saveMeal").onclick = saveMeal;
   $("newMeal").onclick = clearMealForm;
@@ -405,7 +478,8 @@ function renderFood() {
 }
 
 function mealLabel(value) {
-  return MEAL_TYPES.find(([key]) => key === value)?.[1] || value || "Comida";
+  const meal = MEAL_TYPES.find(([key]) => key === value);
+  return meal ? meal[settings.language === "en" ? 2 : 1] : value || tr("food");
 }
 
 function clearMealForm() {
@@ -494,7 +568,9 @@ function renderReport() {
 }
 
 function renderSettings() {
-  $("settings").innerHTML = `<div class="card"><h2>GitHub privado</h2><div class="grid"><label>Owner<input id="owner" value="${settings.owner || ""}"></label><label>Repo<input id="repo" value="${settings.repo || "personal-trainer"}"></label><label>Branch<input id="branch" value="${settings.branch || "main"}"></label><label>Token<input id="token" type="password" placeholder="${settings.token_cipher ? "Token cifrado guardado" : ""}" value="${settings.token || ""}"></label><label>Passphrase local<input id="passphrase" type="password" placeholder="No se guarda"></label></div><div class="actions"><button class="btn" id="saveSettings">Guardar settings</button><button class="btn" id="unlockSettings">Desbloquear</button><button class="btn" id="loadData">Cargar datos</button></div><div id="settingsStatus" class="status"></div></div>`;
+  $("settings").innerHTML = `<div class="card"><h2>${tr("privateGithub")}</h2><div class="grid"><label>${tr("owner")}<input id="owner" value="${settings.owner || ""}"></label><label>${tr("repo")}<input id="repo" value="${settings.repo || "personal-trainer"}"></label><label>${tr("branch")}<input id="branch" value="${settings.branch || "main"}"></label><label>${tr("token")}<input id="token" type="password" placeholder="${settings.token_cipher ? tr("tokenSaved") : ""}" value="${settings.token || ""}"></label><label>${tr("passphrase")}<input id="passphrase" type="password" placeholder="${tr("notSaved")}"></label></div><details class="faq"><summary><span class="info-icon">i</span>${tr("faqTitle")}</summary><p>${tr("faqBody")}</p></details><h2>${tr("preferences")}</h2><div class="grid"><label>${tr("palette")}<select id="palette"><option value="dark">Dark</option><option value="light">Light</option><option value="forest">Forest</option></select></label><label>${tr("language")}<select id="language"><option value="es">Espanol</option><option value="en">English</option></select></label></div><div class="actions"><button class="btn" id="saveSettings">${tr("saveSettings")}</button><button class="btn" id="unlockSettings">${tr("unlock")}</button><button class="btn" id="loadData">${tr("loadData")}</button></div><div id="settingsStatus" class="status"></div></div>`;
+  $("palette").value = settings.palette || "dark";
+  $("language").value = settings.language || "es";
   $("saveSettings").onclick = async () => {
     const rawToken = $("token").value.trim();
     const passphrase = $("passphrase").value;
@@ -502,6 +578,8 @@ function renderSettings() {
       owner: $("owner").value.trim(),
       repo: $("repo").value.trim(),
       branch: $("branch").value.trim() || "main",
+      palette: $("palette").value,
+      language: $("language").value,
     };
     if (rawToken && passphrase) {
       const encrypted = await encryptToken(rawToken, passphrase);
@@ -523,14 +601,19 @@ function renderSettings() {
       });
     }
     saveSettings(next);
-    $("settingsStatus").textContent = rawToken && passphrase ? "Settings guardados con token cifrado." : "Settings guardados.";
+    renderToday();
+    renderWeek();
+    renderFood();
+    renderReport();
+    renderSettings();
+    $("settingsStatus").textContent = rawToken && passphrase ? tr("savedEncrypted") : tr("saved");
   };
   $("unlockSettings").onclick = async () => {
     try {
       await unlockToken($("passphrase").value);
-      $("settingsStatus").textContent = "Token desbloqueado para esta sesion.";
+      $("settingsStatus").textContent = tr("unlocked");
     } catch {
-      $("settingsStatus").textContent = "Passphrase incorrecta.";
+      $("settingsStatus").textContent = tr("badPassphrase");
       $("settingsStatus").classList.add("bad");
     }
   };
@@ -677,6 +760,7 @@ document.querySelectorAll(".tab").forEach((tab) => {
   };
 });
 
+applyPreferences();
 renderToday();
 renderWeek();
 renderFood();
