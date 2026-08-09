@@ -52,6 +52,7 @@ let token = settings.token || sessionStorage.getItem("pt_session_token") || "";
 let plan = null;
 let state = null;
 let todayWorkout = null;
+let weekWorkouts = {};
 let exerciseDb = [];
 
 const $ = (id) => document.getElementById(id);
@@ -68,6 +69,21 @@ const weekdayKey = () =>
   new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "long" })
     .format(new Date())
     .toLowerCase();
+function localDate(dateText) {
+  const [year, month, day] = dateText.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, 12));
+}
+function addDays(dateText, days) {
+  const date = localDate(dateText);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+function weekDates() {
+  const current = localDate(today());
+  const mondayOffset = (current.getUTCDay() + 6) % 7;
+  const monday = addDays(today(), -mondayOffset);
+  return WEEKDAYS.map((day, index) => [...day, addDays(monday, index)]);
+}
 const headers = () => ({
   Accept: "application/vnd.github+json",
   Authorization: `Bearer ${token}`,
@@ -288,16 +304,43 @@ function renderWeek() {
     return;
   }
   root.innerHTML = "";
-  WEEKDAYS.forEach(([key, label]) => {
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `<h2>${label}</h2>`;
+  weekDates().forEach(([key, label, date]) => {
+    const workout = weekWorkouts[date];
+    const planned = plan.weekly_structure?.[key] || [];
+    const completed = workout?.exercises?.filter((ex) => ex.done).length || 0;
+    const total = workout?.exercises?.length || planned.flatMap(sessionExercises).length;
+    const card = document.createElement("details");
+    card.className = "card day-plan";
+    card.open = date === today();
+    card.innerHTML = `<summary><span><b>${label}</b><span class="muted"> ${date}</span></span><span class="pill">${workout ? `${completed}/${total} hechos` : "sin registro"}</span></summary>`;
+    if (workout?.notes) {
+      card.innerHTML += `<div class="status">${workout.notes}</div>`;
+    }
+    if (workout?.exercises?.length) {
+      const done = document.createElement("div");
+      done.innerHTML = `<h3>Registro</h3>`;
+      Object.entries(groupedExercises(workout)).forEach(([session, rows]) => {
+        done.innerHTML += `<h4>${session}</h4>`;
+        rows.forEach(([ex]) => {
+          const parts = [
+            ex.done ? "hecho" : "pendiente",
+            ex.load_kg != null ? `${ex.load_kg} kg` : "",
+            ex.sets != null ? `${ex.sets} series` : "",
+            ex.reps != null ? `${ex.reps} reps` : "",
+            ex.duration_min != null ? `${ex.duration_min} min` : "",
+            ex.rir != null ? `RIR ${ex.rir}` : "",
+          ].filter(Boolean);
+          done.innerHTML += `<div class="row compact-row"><div><div class="name">${ex.name}</div><div class="dose">${parts.join(" · ")}</div></div></div>`;
+        });
+      });
+      card.append(done);
+    }
     (plan.weekly_structure?.[key] || []).forEach((id) => {
       const session = document.createElement("div");
       session.innerHTML = `<h3>${SESSION_META[id] || id}</h3><div class="muted">${plan.session_notes?.[id] || ""}</div>`;
       sessionExercises(id).forEach(([lookup, name, target, kind]) => {
         const media = mediaFor({ lookup, name });
-        session.innerHTML += `<div class="row"><div>${media ? `<img class="media" src="${media}" alt="${name}" loading="lazy">` : ""}<div class="name">${name}</div><div class="dose">${target || ""}</div><span class="pill">${kind}</span></div></div>`;
+        session.innerHTML += `<div class="row compact-row"><div>${media ? `<img class="media" src="${media}" alt="${name}" loading="lazy">` : ""}<div class="name">${name}</div><div class="dose">${target || ""}</div><span class="pill">${kind}</span></div></div>`;
       });
       card.append(session);
     });
@@ -400,6 +443,14 @@ async function loadData() {
     plan = await getJson("data/current-plan.json");
     state = await getJson("data/import/current-state.json", null);
     todayWorkout = await getJson(`data/import/workouts/${today()}.json`, null);
+    weekWorkouts = Object.fromEntries(
+      await Promise.all(
+        weekDates().map(async ([, , date]) => [
+          date,
+          await getJson(`data/import/workouts/${date}.json`, null),
+        ]),
+      ),
+    );
     status.textContent = "Datos cargados.";
     renderToday();
     renderWeek();
