@@ -22,6 +22,9 @@
 .info-icon{display:inline-grid;place-items:center;width:20px;height:20px;border:1px solid var(--line);border-radius:50%;color:var(--accent);font-size:12px}
 .edit-banner{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px}
 :root[data-palette="light"] .edit-banner{background:#f0f3f7}
+.photo-preview{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:8px;margin:8px 0}
+.photo-preview:empty{display:none}
+.photo-preview img{width:100%;aspect-ratio:1;object-fit:cover;border:1px solid var(--line);border-radius:10px;background:var(--field)}
 </style>
 </head>
 <body>

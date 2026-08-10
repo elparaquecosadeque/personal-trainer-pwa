@@ -362,6 +362,20 @@ function imageToJpeg(file) {
   });
 }
 
+function renderPhotoPreview(inputId, previewId) {
+  const preview = $(previewId);
+  if (!preview) return;
+  preview.innerHTML = "";
+  Array.from($(inputId).files || []).forEach((file) => {
+    const url = URL.createObjectURL(file);
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = file.name;
+    img.onload = () => URL.revokeObjectURL(url);
+    preview.append(img);
+  });
+}
+
 function sessionExercises(id) {
   const names = plan?.strength_sessions?.[id];
   if (names) return names.map((name) => [name, ...(EX[name] || [name, "", "strength"])]);
@@ -519,10 +533,12 @@ function renderFood() {
   const mealOptions = MEAL_TYPES.map(
     ([value, es, en]) => `<option value="${value}">${settings.language === "en" ? en : es}</option>`,
   ).join("");
-  $("food").innerHTML = `${weekNavHtml()}<div id="foodWeek"></div><div class="card" id="mealForm"><div class="edit-banner"><div><div class="muted" id="mealEditingDate">${tr("newMeal")}</div><div id="mealEditingSummary" class="status"></div></div><button class="btn mini hide" id="cancelMealEdit">${tr("cancelEdit")}</button></div><h2>${tr("food")}</h2><input id="mealEditIndex" type="hidden"><div class="grid"><label>Fecha<input id="mealDate" type="date" value="${today()}"></label><label>Tipo<select id="mealType">${mealOptions}</select></label><label>Hora aprox.<input id="mealTime" placeholder="13:30"></label></div><div class="photo-actions"><label class="photo-btn">Foto antes<input id="mealBefore" type="file" accept="image/*"></label><label class="photo-btn optional">Foto despues<input id="mealAfter" type="file" accept="image/*"></label></div><label>Items / descripcion<textarea id="mealItems" placeholder="pollo con arroz&#10;ensalada&#10;agua"></textarea></label><label>Notas para estimacion<textarea id="mealNotes" placeholder="Sobro media porcion. La foto despues muestra lo que no comi."></textarea></label><div class="card status">Vista semanal en lectura. Usa Editar solo para corregir una entrada. Kcal y proteina quedan para ChatGPT.</div><div class="actions"><button class="btn" id="saveMeal">${tr("saveMeal")}</button><button class="btn" id="newMeal">${tr("newMeal")}</button></div><div id="mealStatus" class="status"></div></div>`;
+  $("food").innerHTML = `${weekNavHtml()}<div id="foodWeek"></div><div class="card" id="mealForm"><div class="edit-banner"><div><div class="muted" id="mealEditingDate">${tr("newMeal")}</div><div id="mealEditingSummary" class="status"></div></div><button class="btn mini hide" id="cancelMealEdit">${tr("cancelEdit")}</button></div><h2>${tr("food")}</h2><input id="mealEditIndex" type="hidden"><div class="grid"><label>Fecha<input id="mealDate" type="date" value="${today()}"></label><label>Tipo<select id="mealType">${mealOptions}</select></label><label>Hora aprox.<input id="mealTime" placeholder="13:30"></label></div><div class="photo-actions"><label class="photo-btn">Fotos antes<input id="mealBefore" type="file" accept="image/*" multiple></label><label class="photo-btn optional">Foto despues<input id="mealAfter" type="file" accept="image/*"></label></div><div class="photo-preview" id="mealBeforePreview"></div><div class="photo-preview" id="mealAfterPreview"></div><label>Items / descripcion<textarea id="mealItems" placeholder="pollo con arroz&#10;ensalada&#10;agua"></textarea></label><label>Notas para estimacion<textarea id="mealNotes" placeholder="Sobro media porcion. La foto despues muestra lo que no comi."></textarea></label><div class="card status">Vista semanal en lectura. Usa Editar solo para corregir una entrada. Kcal y proteina quedan para ChatGPT.</div><div class="actions"><button class="btn" id="saveMeal">${tr("saveMeal")}</button><button class="btn" id="newMeal">${tr("newMeal")}</button></div><div id="mealStatus" class="status"></div></div>`;
   $("saveMeal").onclick = saveMeal;
   $("newMeal").onclick = clearMealForm;
   $("cancelMealEdit").onclick = clearMealForm;
+  $("mealBefore").onchange = () => renderPhotoPreview("mealBefore", "mealBeforePreview");
+  $("mealAfter").onchange = () => renderPhotoPreview("mealAfter", "mealAfterPreview");
   renderFoodWeek();
   bindWeekNav($("food"));
 }
@@ -541,6 +557,8 @@ function clearMealForm() {
   $("mealTime").value = "";
   $("mealBefore").value = "";
   $("mealAfter").value = "";
+  $("mealBeforePreview").innerHTML = "";
+  $("mealAfterPreview").innerHTML = "";
   $("mealItems").value = "";
   $("mealNotes").value = "";
   $("saveMeal").textContent = tr("saveMeal");
@@ -561,6 +579,8 @@ function editMeal(date, index) {
   $("mealNotes").value = meal.notes || "";
   $("mealBefore").value = "";
   $("mealAfter").value = "";
+  $("mealBeforePreview").innerHTML = "";
+  $("mealAfterPreview").innerHTML = "";
   $("saveMeal").textContent = tr("saveChanges");
   $("cancelMealEdit").classList.remove("hide");
   $("mealStatus").textContent = "Editando comida existente. Las fotos actuales se conservan si no subes nuevas.";
@@ -579,8 +599,9 @@ function renderFoodWeek() {
     card.innerHTML = `<summary><span><b>${label}</b><span class="muted"> ${date}</span></span><span class="pill">${meals.length ? `${meals.length} comidas` : "sin registro"}</span></summary>`;
     meals.forEach((meal, index) => {
       const items = (meal.items || []).map((item) => item.name).filter(Boolean).join(", ");
+      const beforeCount = meal.photos?.before_paths?.length || (meal.photos?.before_path ? 1 : 0);
       const photos = meal.photos
-        ? [meal.photos.before_path ? "foto antes" : "", meal.photos.after_path ? "foto despues" : ""].filter(Boolean).join(" · ")
+        ? [beforeCount ? `${beforeCount} foto${beforeCount > 1 ? "s" : ""} antes` : "", meal.photos.after_path ? "foto despues" : ""].filter(Boolean).join(" · ")
         : "";
       card.innerHTML += `<div class="meal-read"><div><div class="name">${mealLabel(meal.meal)} ${meal.time_approx || ""}</div><div class="dose">${items || "Sin descripcion"}</div>${meal.notes ? `<div class="muted">${meal.notes}</div>` : ""}${photos ? `<div class="muted">${photos}</div>` : ""}</div><button class="btn mini" data-meal="${date}:${index}">Editar</button></div>`;
     });
@@ -760,13 +781,15 @@ async function saveMeal() {
     });
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const photos = editIndex >= 0 ? { ...(existing.meals[editIndex]?.photos || {}) } : {};
-    if ($("mealBefore").files[0]) {
-      photos.before_path = `data/media/nutrition/${date}/${stamp}-before.jpg`;
-      await putBase64(
-        photos.before_path,
-        await imageToJpeg($("mealBefore").files[0]),
-        `Upload meal before photo ${date}`,
-      );
+    const beforeFiles = Array.from($("mealBefore").files || []);
+    if (beforeFiles.length) {
+      photos.before_paths = [];
+      for (const [index, file] of beforeFiles.entries()) {
+        const path = `data/media/nutrition/${date}/${stamp}-before-${index + 1}.jpg`;
+        await putBase64(path, await imageToJpeg(file), `Upload meal before photo ${date}`);
+        photos.before_paths.push(path);
+      }
+      photos.before_path = photos.before_paths[0];
     }
     if ($("mealAfter").files[0]) {
       photos.after_path = `data/media/nutrition/${date}/${stamp}-after.jpg`;
