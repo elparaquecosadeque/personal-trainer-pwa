@@ -149,6 +149,8 @@ const MEAL_TYPES = [
   ["snack", "Snack", "Snack"],
   ["dessert", "Postre", "Dessert"],
 ];
+const TIME_HOURS = Array.from({ length: 12 }, (_, index) => String(index + 1));
+const TIME_MINUTES = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"));
 
 let settings = JSON.parse(localStorage.getItem(STORE) || "{}");
 let token = settings.token || sessionStorage.getItem("pt_session_token") || "";
@@ -533,7 +535,9 @@ function renderFood() {
   const mealOptions = MEAL_TYPES.map(
     ([value, es, en]) => `<option value="${value}">${settings.language === "en" ? en : es}</option>`,
   ).join("");
-  $("food").innerHTML = `${weekNavHtml()}<div id="foodWeek"></div><div class="card" id="mealForm"><div class="edit-banner"><div><div class="muted" id="mealEditingDate">${tr("newMeal")}</div><div id="mealEditingSummary" class="status"></div></div><button class="btn mini hide" id="cancelMealEdit">${tr("cancelEdit")}</button></div><h2>${tr("food")}</h2><input id="mealEditIndex" type="hidden"><div class="grid"><label>Fecha<input id="mealDate" type="date" value="${today()}"></label><label>Tipo<select id="mealType">${mealOptions}</select></label><label>Hora aprox.<input id="mealTime" placeholder="13:30"></label></div><div class="photo-actions"><label class="photo-btn">Fotos antes<input id="mealBefore" type="file" accept="image/*" multiple></label><label class="photo-btn optional">Foto despues<input id="mealAfter" type="file" accept="image/*"></label></div><div class="photo-preview" id="mealBeforePreview"></div><div class="photo-preview" id="mealAfterPreview"></div><label>Items / descripcion<textarea id="mealItems" placeholder="pollo con arroz&#10;ensalada&#10;agua"></textarea></label><label>Notas para estimacion<textarea id="mealNotes" placeholder="Sobro media porcion. La foto despues muestra lo que no comi."></textarea></label><div class="card status">Vista semanal en lectura. Usa Editar solo para corregir una entrada. Kcal y proteina quedan para ChatGPT.</div><div class="actions"><button class="btn" id="saveMeal">${tr("saveMeal")}</button><button class="btn" id="newMeal">${tr("newMeal")}</button></div><div id="mealStatus" class="status"></div></div>`;
+  const hourOptions = TIME_HOURS.map((hour) => `<option value="${hour}">${hour}</option>`).join("");
+  const minuteOptions = TIME_MINUTES.map((minute) => `<option value="${minute}">${minute}</option>`).join("");
+  $("food").innerHTML = `${weekNavHtml()}<div id="foodWeek"></div><div class="card" id="mealForm"><div class="edit-banner"><div><div class="muted" id="mealEditingDate">${tr("newMeal")}</div><div id="mealEditingSummary" class="status"></div></div><button class="btn mini hide" id="cancelMealEdit">${tr("cancelEdit")}</button></div><h2>${tr("food")}</h2><input id="mealEditIndex" type="hidden"><div class="grid"><label>Fecha<input id="mealDate" type="date" value="${today()}"></label><label>Tipo<select id="mealType">${mealOptions}</select></label><div class="time-picker"><div class="muted">Hora aprox. (12-hour)</div><select id="mealHour"><option value="">Hora</option>${hourOptions}</select><select id="mealMinute"><option value="">Min</option>${minuteOptions}</select><select id="mealPeriod"><option value="">AM/PM</option><option>AM</option><option>PM</option></select></div></div><div class="photo-actions"><label class="photo-btn">Fotos antes<input id="mealBefore" type="file" accept="image/*" multiple></label><label class="photo-btn optional">Foto despues<input id="mealAfter" type="file" accept="image/*"></label></div><div class="photo-preview" id="mealBeforePreview"></div><div class="photo-preview" id="mealAfterPreview"></div><label>Items / descripcion<textarea id="mealItems" placeholder="pollo con arroz&#10;ensalada&#10;agua"></textarea></label><label>Notas para estimacion<textarea id="mealNotes" placeholder="Sobro media porcion. La foto despues muestra lo que no comi."></textarea></label><div class="card status">Vista semanal en lectura. Usa Editar solo para corregir una entrada. Kcal y proteina quedan para ChatGPT.</div><div class="actions"><button class="btn" id="saveMeal">${tr("saveMeal")}</button><button class="btn" id="newMeal">${tr("newMeal")}</button></div><div id="mealStatus" class="status"></div></div>`;
   $("saveMeal").onclick = saveMeal;
   $("newMeal").onclick = clearMealForm;
   $("cancelMealEdit").onclick = clearMealForm;
@@ -548,13 +552,40 @@ function mealLabel(value) {
   return meal ? meal[settings.language === "en" ? 2 : 1] : value || tr("food");
 }
 
+function parseMealTime(value) {
+  const match = String(value || "").match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (!match) return { hour: "", minute: "", period: "" };
+  let hour = Number(match[1]);
+  const minute = match[2];
+  let period = match[3]?.toUpperCase();
+  if (!period) {
+    period = hour >= 12 ? "PM" : "AM";
+    hour = hour % 12 || 12;
+  }
+  return { hour: String(hour), minute, period };
+}
+
+function setMealTime(value) {
+  const time = parseMealTime(value);
+  $("mealHour").value = time.hour;
+  $("mealMinute").value = time.minute;
+  $("mealPeriod").value = time.period;
+}
+
+function mealTimeValue() {
+  const hour = $("mealHour").value;
+  const minute = $("mealMinute").value;
+  const period = $("mealPeriod").value;
+  return hour && minute && period ? `${hour}:${minute} ${period}` : null;
+}
+
 function clearMealForm() {
   $("mealEditingDate").textContent = tr("newMeal");
   $("mealEditingSummary").textContent = "";
   $("mealDate").value = today();
   $("mealEditIndex").value = "";
   $("mealType").value = "breakfast";
-  $("mealTime").value = "";
+  setMealTime("");
   $("mealBefore").value = "";
   $("mealAfter").value = "";
   $("mealBeforePreview").innerHTML = "";
@@ -574,7 +605,7 @@ function editMeal(date, index) {
   $("mealDate").value = date;
   $("mealEditIndex").value = index;
   $("mealType").value = meal.meal || "breakfast";
-  $("mealTime").value = meal.time_approx || "";
+  setMealTime(meal.time_approx || "");
   $("mealItems").value = (meal.items || []).map((item) => item.name || "").join("\n");
   $("mealNotes").value = meal.notes || "";
   $("mealBefore").value = "";
@@ -799,11 +830,12 @@ async function saveMeal() {
         `Upload meal after photo ${date}`,
       );
     }
+    const timeApprox = mealTimeValue();
     const meal = {
       ...(editIndex >= 0 ? existing.meals[editIndex] || {} : {}),
       meal: $("mealType").value,
-      time_approx: $("mealTime").value || null,
-      time_accuracy: $("mealTime").value ? "user_entered" : "unknown",
+      time_approx: timeApprox,
+      time_accuracy: timeApprox ? "user_entered" : "unknown",
       items: $("mealItems").value.split("\n").filter(Boolean).map((name) => ({ name })),
       notes: $("mealNotes").value || null,
       photos,
