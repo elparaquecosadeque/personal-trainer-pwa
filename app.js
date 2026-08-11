@@ -508,9 +508,10 @@ function exerciseRow(ex) {
   const media = mediaFor(ex);
   row.innerHTML = `<div>${media ? `<img class="media" src="${media}" alt="${ex.name}" loading="lazy">` : ""}<div class="name">${ex.name}</div><div class="dose">${ex.target || ""}</div></div>`;
   if (strength) {
-    row.innerHTML += `<input placeholder="kg" inputmode="decimal" value="${ex.load_kg ?? ""}"><input placeholder="reps" inputmode="numeric" value="${ex.reps ?? ""}"><select class="rir"><option value="">RIR</option><option>4</option><option>3</option><option>2</option><option>1</option><option>0</option></select>`;
-    const [kg, reps, rir] = row.querySelectorAll("input,select");
+    row.innerHTML += `<input placeholder="kg" inputmode="decimal" value="${ex.load_kg ?? ""}"><input placeholder="sets" inputmode="numeric" value="${ex.sets ?? ""}"><input placeholder="reps" inputmode="numeric" value="${ex.reps ?? ""}"><select class="rir"><option value="">RIR</option><option>4</option><option>3</option><option>2</option><option>1</option><option>0</option></select>`;
+    const [kg, sets, reps, rir] = row.querySelectorAll("input,select");
     kg.oninput = (e) => (ex.load_kg = e.target.value === "" ? null : Number(e.target.value));
+    sets.oninput = (e) => (ex.sets = e.target.value === "" ? null : Number(e.target.value));
     reps.oninput = (e) => (ex.reps = e.target.value === "" ? null : Number(e.target.value));
     rir.value = ex.rir ?? "";
     rir.onchange = (e) => (ex.rir = e.target.value === "" ? null : Number(e.target.value));

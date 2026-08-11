@@ -27,6 +27,8 @@
 .photo-preview img{width:100%;aspect-ratio:1;object-fit:cover;border:1px solid var(--line);border-radius:10px;background:var(--field)}
 .time-picker{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
 .time-picker .muted{grid-column:1/4}
+.row{grid-template-columns:1fr 76px 64px 64px 62px}
+@media(max-width:520px){.row{grid-template-columns:repeat(3,1fr)}.row>div{grid-column:1/4}.row .rir{grid-column:auto}.check{grid-column:1/4}}
 </style>
 </head>
 <body>
