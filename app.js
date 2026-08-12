@@ -161,6 +161,7 @@ let weekWorkouts = {};
 let weekNutrition = {};
 let exerciseDb = [];
 let visibleWeekStart = null;
+let activeWorkoutDate = null;
 
 const $ = (id) => document.getElementById(id);
 const tr = (key) => TEXT[settings.language || "es"]?.[key] || TEXT.es[key] || key;
@@ -173,10 +174,9 @@ const today = () => {
   }).formatToParts(new Date());
   return `${parts.find((p) => p.type === "year").value}-${parts.find((p) => p.type === "month").value}-${parts.find((p) => p.type === "day").value}`;
 };
-const weekdayKey = () =>
-  new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "long" })
-    .format(new Date())
-    .toLowerCase();
+function weekdayKeyFor(dateText) {
+  return WEEKDAYS[(localDate(dateText).getUTCDay() + 6) % 7][0];
+}
 function localDate(dateText) {
   const [year, month, day] = dateText.split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, day, 12));
@@ -384,10 +384,10 @@ function sessionExercises(id) {
   return SPECIAL[id] || [];
 }
 
-function plannedWorkout() {
-  const ids = plan?.weekly_structure?.[weekdayKey()] || [];
+function plannedWorkout(dateText = today()) {
+  const ids = plan?.weekly_structure?.[weekdayKeyFor(dateText)] || [];
   return {
-    date: today(),
+    date: dateText,
     timezone: TZ,
     session: "day",
     perceived_effort: "unknown",
@@ -425,7 +425,8 @@ function renderToday() {
     root.innerHTML = `<div class="card status bad">${settings.token_cipher ? tr("unlockFirst") : tr("configureFirst")}</div>`;
     return;
   }
-  const workout = todayWorkout || plannedWorkout();
+  const date = activeWorkoutDate || today();
+  const workout = date === today() ? todayWorkout || plannedWorkout(date) : weekWorkouts[date] || plannedWorkout(date);
   root.innerHTML = `<div class="card"><div class="muted">${workout.date}</div><h2>Entrenamiento</h2><label>Esfuerzo percibido<select id="effort"><option value="unknown">Sin registrar</option><option value="easy">Facil</option><option value="moderate">Moderado</option><option value="hard">Dificil</option><option value="near_failure">Cerca del fallo</option></select></label></div>`;
   $("effort").value = workout.perceived_effort || "unknown";
   $("effort").onchange = (e) => (workout.perceived_effort = e.target.value);
@@ -444,7 +445,9 @@ function renderToday() {
   $("workoutNotes").oninput = (e) => (workout.notes = e.target.value);
   $("saveWorkout").onclick = () => saveWorkout(workout);
   $("resetWorkout").onclick = () => {
-    todayWorkout = plannedWorkout();
+    const next = plannedWorkout(date);
+    if (date === today()) todayWorkout = next;
+    else weekWorkouts[date] = next;
     renderToday();
   };
 }
@@ -496,9 +499,20 @@ function renderWeek() {
       });
       card.append(session);
     });
+    card.innerHTML += `<div class="actions"><button class="btn mini" data-workout="${date}">${workout ? "Editar registro" : "Registrar dia"}</button></div>`;
     root.append(card);
   });
+  root.querySelectorAll("[data-workout]").forEach((button) => {
+    button.onclick = () => editWorkout(button.dataset.workout);
+  });
   bindWeekNav(root);
+}
+
+function editWorkout(date) {
+  activeWorkoutDate = date;
+  renderToday();
+  activateTab("today");
+  $("today").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function exerciseRow(ex) {
@@ -791,6 +805,9 @@ async function saveWorkout(workout) {
     status.textContent = "Guardando...";
     await putJson(`data/import/workouts/${workout.date}.json`, workout, `Log workout ${workout.date}`);
     await saveCurrentState({ latest_workout: workout });
+    weekWorkouts[workout.date] = workout;
+    if (workout.date === today()) todayWorkout = workout;
+    renderWeek();
     status.textContent = "Guardado en GitHub.";
   } catch (err) {
     status.textContent = err.message;
@@ -869,12 +886,14 @@ async function saveCurrentState(patch) {
   renderReport();
 }
 
+function activateTab(id) {
+  document.querySelectorAll(".tab,.panel").forEach((el) => el.classList.remove("active"));
+  document.querySelector(`[data-tab="${id}"]`).classList.add("active");
+  $(id).classList.add("active");
+}
+
 document.querySelectorAll(".tab").forEach((tab) => {
-  tab.onclick = () => {
-    document.querySelectorAll(".tab,.panel").forEach((el) => el.classList.remove("active"));
-    tab.classList.add("active");
-    $(tab.dataset.tab).classList.add("active");
-  };
+  tab.onclick = () => activateTab(tab.dataset.tab);
 });
 
 applyPreferences();
