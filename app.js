@@ -699,12 +699,53 @@ function pendingMeals() {
   );
 }
 
+function mid(range) {
+  return Array.isArray(range) ? Math.round((Number(range[0]) + Number(range[1])) / 2) : null;
+}
+
+function dayNutrition(day) {
+  const daily = day?.daily_estimate || day?.daily_running_estimate;
+  let kcal = mid(daily?.kcal_range);
+  let protein = mid(daily?.protein_g_range);
+  if (kcal == null) kcal = (day?.meals || []).reduce((sum, meal) => sum + (mid(meal.estimated_kcal_range) || 0), 0) || null;
+  if (protein == null) protein = (day?.meals || []).reduce((sum, meal) => sum + (mid(meal.estimated_protein_g_range) || 0), 0) || null;
+  return { kcal, protein };
+}
+
+function workoutMetrics(workout) {
+  const done = (workout?.exercises || []).filter((ex) => ex.done);
+  const rirs = done.map((ex) => ex.rir).filter((value) => value != null);
+  return {
+    done: done.length,
+    rir: rirs.length ? rirs.reduce((sum, value) => sum + Number(value), 0) / rirs.length : null,
+    volume: Math.round(done.reduce((sum, ex) => sum + ((ex.load_kg || 0) * (ex.sets || 0) * (ex.reps || 0)), 0)),
+    minutes: done.reduce((sum, ex) => sum + (Number(ex.duration_min) || 0), 0),
+  };
+}
+
+function bar(label, value, max, suffix = "") {
+  const width = max ? Math.max(4, Math.round((value / max) * 100)) : 0;
+  return `<div class="bar-row"><span>${label}</span><div class="bar"><i style="width:${width}%"></i></div><b>${value || "-"}${value ? suffix : ""}</b></div>`;
+}
+
+function dashboardHtml() {
+  const days = weekDates().map(([, label, date]) => ({ label: label.slice(0, 3), nutrition: dayNutrition(weekNutrition[date]), workout: workoutMetrics(weekWorkouts[date]) }));
+  const kcalMax = Math.max(...days.map((day) => day.nutrition.kcal || 0), 1);
+  const loadMax = Math.max(...days.map((day) => day.workout.volume || day.workout.minutes || 0), 1);
+  const kcalDays = days.filter((day) => day.nutrition.kcal);
+  const protein = days.reduce((sum, day) => sum + (day.nutrition.protein || 0), 0);
+  const workouts = days.filter((day) => day.workout.done).length;
+  const rirs = days.map((day) => day.workout.rir).filter((value) => value != null);
+  const avgRir = rirs.length ? (rirs.reduce((sum, value) => sum + value, 0) / rirs.length).toFixed(1) : "-";
+  return `<div class="dash"><div class="metric"><span>Kcal semana</span><b>${kcalDays.reduce((sum, day) => sum + day.nutrition.kcal, 0) || "-"}</b><small>${kcalDays.length}/7 dias estimados</small></div><div class="metric"><span>Proteina</span><b>${Math.round(protein) || "-"}</b><small>g estimados</small></div><div class="metric"><span>Entrenos</span><b>${workouts}</b><small>dias con registro</small></div><div class="metric"><span>RIR prom.</span><b>${avgRir}</b><small>menor = mas intenso</small></div><div class="card"><h2>Kcal estimadas</h2>${days.map((day) => bar(day.label, day.nutrition.kcal, kcalMax, " kcal")).join("")}</div><div class="card"><h2>Carga / minutos</h2>${days.map((day) => bar(day.label, day.workout.volume || day.workout.minutes, loadMax, day.workout.volume ? " kg-reps" : " min")).join("")}</div></div>`;
+}
+
 function renderReport() {
   const latest = state?.latest_workout;
   const pending = pendingMeals();
   const prompt = "procesa comidas pendientes";
   const dates = weekDates();
-  $("report").innerHTML = `${weekNavHtml()}<div class="card"><h2>Ultimo sync</h2><div class="status">${state?.generated_at || "Sin snapshot cargado"}</div>${latest ? `<p><span class="pill">${latest.date}</span><span class="pill">${latest.perceived_effort || "unknown"}</span></p><div>${latest.exercises?.filter((x) => x.done).length || 0}/${latest.exercises?.length || 0} ejercicios hechos</div>` : ""}</div><div class="card"><h2>${tr("pendingForChatGPT")}</h2><div class="status">${tr("weekScope")}: ${dates[0][2]} al ${dates[6][2]}</div><p><span class="pill">${pending.length} comidas</span></p>${pending.length ? pending.map(({ date, meal }) => `<div class="meal-read"><div><div class="name">${date} · ${mealLabel(meal.meal)} ${meal.time_approx || ""}</div><div class="dose">${(meal.items || []).map((item) => item.name).filter(Boolean).join(", ") || "Sin descripcion"}</div><div class="muted">${meal.photos?.before_path ? "foto antes" : "sin foto antes"}${meal.photos?.after_path ? " · foto despues" : ""}</div></div></div>`).join("") : `<div class="status">${tr("noPending")}</div>`}<div class="actions"><button class="btn" id="copyPendingPrompt">${tr("copyPrompt")}</button></div><div class="status">Pedido: <code>${prompt}</code></div><div id="copyStatus" class="status"></div></div>`;
+  $("report").innerHTML = `${weekNavHtml()}${dashboardHtml()}<div class="card"><h2>Ultimo sync</h2><div class="status">${state?.generated_at || "Sin snapshot cargado"}</div>${latest ? `<p><span class="pill">${latest.date}</span><span class="pill">${latest.perceived_effort || "unknown"}</span></p><div>${latest.exercises?.filter((x) => x.done).length || 0}/${latest.exercises?.length || 0} ejercicios hechos</div>` : ""}</div><div class="card"><h2>${tr("pendingForChatGPT")}</h2><div class="status">${tr("weekScope")}: ${dates[0][2]} al ${dates[6][2]}</div><p><span class="pill">${pending.length} comidas</span></p>${pending.length ? pending.map(({ date, meal }) => `<div class="meal-read"><div><div class="name">${date} · ${mealLabel(meal.meal)} ${meal.time_approx || ""}</div><div class="dose">${(meal.items || []).map((item) => item.name).filter(Boolean).join(", ") || "Sin descripcion"}</div><div class="muted">${meal.photos?.before_path ? "foto antes" : "sin foto antes"}${meal.photos?.after_path ? " · foto despues" : ""}</div></div></div>`).join("") : `<div class="status">${tr("noPending")}</div>`}<div class="actions"><button class="btn" id="copyPendingPrompt">${tr("copyPrompt")}</button></div><div class="status">Pedido: <code>${prompt}</code></div><div id="copyStatus" class="status"></div></div>`;
   bindWeekNav($("report"));
   $("copyPendingPrompt").onclick = async () => {
     await navigator.clipboard.writeText(prompt);
