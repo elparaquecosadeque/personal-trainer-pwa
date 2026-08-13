@@ -52,5 +52,71 @@
   <section id="settings" class="panel"></section>
 </div>
 <script src="./app.js"></script>
+<script>
+(() => {
+  const prompt = "procesa comidas pendientes";
+  function photoPaths() {
+    const paths = [];
+    for (const { meal } of pendingMeals()) {
+      const photos = meal.photos || {};
+      for (const path of photos.before_paths || []) paths.push(path);
+      if (photos.before_path) paths.push(photos.before_path);
+      if (photos.after_path) paths.push(photos.after_path);
+    }
+    return [...new Set(paths.filter(Boolean))];
+  }
+  async function imageFile(path) {
+    const res = await fetch(`${api(path)}?ref=${encodeURIComponent(settings.branch || "main")}`, { headers: headers() });
+    if (!res.ok) throw new Error(`No pude leer ${path}: ${res.status}`);
+    const entry = await res.json();
+    const binary = atob(String(entry.content || "").replace(/\n/g, ""));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    return new File([bytes], path.split("/").pop() || "comida.jpg", { type: "image/jpeg" });
+  }
+  async function copyPrompt() {
+    try { await navigator.clipboard.writeText(prompt); }
+    catch {
+      const area = document.createElement("textarea");
+      area.value = prompt; area.style.position = "fixed"; area.style.opacity = "0";
+      document.body.append(area); area.select(); document.execCommand("copy"); area.remove();
+    }
+  }
+  function download(file) {
+    const url = URL.createObjectURL(file); const link = document.createElement("a");
+    link.href = url; link.download = file.name; document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  async function run() {
+    const status = document.getElementById("sharePendingStatus");
+    const button = document.getElementById("sharePendingMeals");
+    try {
+      if (!token) throw new Error("Desbloquea el token en Settings primero.");
+      if (!pendingMeals().length) throw new Error("No hay comidas pendientes en la semana visible.");
+      button.disabled = true; status.classList.remove("bad"); status.textContent = "Preparando fotos pendientes...";
+      const files = []; for (const path of photoPaths()) files.push(await imageFile(path));
+      const canShareFiles = files.length > 0 && navigator.canShare?.({ files });
+      if (navigator.share && (!files.length || canShareFiles)) {
+        status.textContent = files.length ? `Compartiendo ${files.length} foto${files.length === 1 ? "" : "s"}...` : "Abriendo compartir...";
+        await navigator.share({ title: "Procesar comidas pendientes", text: prompt, ...(files.length ? { files } : {}) });
+        status.textContent = "Selecciona ChatGPT y envía el mensaje para iniciar el análisis."; return;
+      }
+      await copyPrompt(); files.forEach(download);
+      status.textContent = files.length ? `Este navegador no comparte archivos directamente. Descargué ${files.length} foto${files.length === 1 ? "" : "s"} y copié “${prompt}”. Adjunta las fotos en ChatGPT y pega el comando.` : `Copié “${prompt}”. Ábrelo en ChatGPT y envíalo.`;
+    } catch (err) {
+      if (err?.name === "AbortError") status.textContent = "Compartir cancelado.";
+      else { status.textContent = err.message || String(err); status.classList.add("bad"); }
+    } finally { if (button) button.disabled = false; }
+  }
+  function install() {
+    const copy = document.getElementById("copyPendingPrompt");
+    if (!copy || document.getElementById("sharePendingMeals")) return;
+    const button = document.createElement("button"); button.className = "btn"; button.id = "sharePendingMeals"; button.textContent = "Procesar en ChatGPT"; button.onclick = run; copy.parentElement?.append(button);
+    const status = document.createElement("div"); status.id = "sharePendingStatus"; status.className = "status"; status.textContent = "Comparte las fotos pendientes como archivos reales para que ChatGPT pueda inspeccionarlas visualmente."; copy.closest(".card")?.append(status);
+  }
+  new MutationObserver(install).observe(document.getElementById("report"), { childList: true, subtree: true });
+  install();
+})();
+</script>
 </body>
 </html>
