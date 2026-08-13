@@ -22,6 +22,10 @@ const TEXT = {
     saveSettings: "Guardar settings",
     unlock: "Desbloquear",
     loadData: "Cargar datos",
+    unlockSessionTitle: "Desbloquear datos",
+    unlockSessionBody: "Hay un token cifrado guardado en este dispositivo. Ingresa tu passphrase para desbloquearlo solo durante esta sesion.",
+    unlockAndLoad: "Desbloquear y cargar datos",
+    skipUnlock: "Ahora no",
     faqTitle: "Como funciona el token",
     faqBody:
       "La app publica no contiene tus datos. Lee y escribe el repo privado solo cuando este navegador tiene tu PAT. Si usas passphrase, el PAT queda cifrado en localStorage y se desbloquea solo para esta sesion. La passphrase no se guarda.",
@@ -69,6 +73,10 @@ const TEXT = {
     saveSettings: "Save settings",
     unlock: "Unlock",
     loadData: "Load data",
+    unlockSessionTitle: "Unlock data",
+    unlockSessionBody: "An encrypted token is saved on this device. Enter your passphrase to unlock it only for this session.",
+    unlockAndLoad: "Unlock and load data",
+    skipUnlock: "Not now",
     faqTitle: "How token security works",
     faqBody:
       "The public app does not include your data. It reads and writes the private repo only when this browser has your PAT. With a passphrase, the PAT is encrypted in localStorage and unlocked only for this session. The passphrase is not stored.",
@@ -256,6 +264,10 @@ function applyPreferences() {
   document.documentElement.dataset.palette = settings.palette || "dark";
   document.documentElement.lang = settings.language || "es";
   $("subtitle").textContent = tr("subtitle");
+  $("unlockTitle").textContent = tr("unlockSessionTitle");
+  $("unlockBody").textContent = tr("unlockSessionBody");
+  $("unlockAndLoad").textContent = tr("unlockAndLoad");
+  $("skipUnlock").textContent = tr("skipUnlock");
   document.querySelectorAll("[data-label]").forEach((node) => {
     node.textContent = tr(node.dataset.label);
   });
@@ -302,6 +314,15 @@ async function unlockToken(passphrase) {
   );
   token = new TextDecoder().decode(plain);
   sessionStorage.setItem("pt_session_token", token);
+}
+
+function showUnlockDialog() {
+  const dialog = $("unlockDialog");
+  if (!settings.token_cipher || token || !dialog || dialog.open) return;
+  $("unlockPassphrase").value = "";
+  $("unlockDialogStatus").textContent = "";
+  dialog.showModal();
+  $("unlockPassphrase").focus();
 }
 
 async function getJson(path, fallback = null) {
@@ -896,7 +917,26 @@ document.querySelectorAll(".tab").forEach((tab) => {
   tab.onclick = () => activateTab(tab.dataset.tab);
 });
 
+$("skipUnlock").onclick = () => $("unlockDialog").close();
+$("unlockAndLoad").onclick = async () => {
+  const status = $("unlockDialogStatus");
+  try {
+    status.textContent = tr("loadingGithub");
+    status.classList.remove("bad");
+    await unlockToken($("unlockPassphrase").value);
+    $("unlockDialog").close();
+    await loadData();
+  } catch {
+    status.textContent = tr("badPassphrase");
+    status.classList.add("bad");
+  }
+};
+$("unlockPassphrase").onkeydown = (event) => {
+  if (event.key === "Enter") $("unlockAndLoad").click();
+};
+
 applyPreferences();
 renderAll();
 if (token) loadData();
+else showUnlockDialog();
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(console.warn);

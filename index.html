@@ -29,6 +29,9 @@
 .time-picker .muted{grid-column:1/4}
 .row{grid-template-columns:1fr 76px 64px 64px 62px}
 @media(max-width:520px){.row{grid-template-columns:repeat(3,1fr)}.row>div{grid-column:1/4}.row .rir{grid-column:auto}.check{grid-column:1/4}}
+dialog{width:min(92vw,420px);border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--text);padding:16px}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+.dialog-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
 </style>
 </head>
 <body>
@@ -51,6 +54,16 @@
   <section id="report" class="panel"></section>
   <section id="settings" class="panel"></section>
 </div>
+<dialog id="unlockDialog">
+  <h2 id="unlockTitle">Desbloquear datos</h2>
+  <p class="status" id="unlockBody">Hay un token cifrado guardado en este dispositivo.</p>
+  <label>Passphrase local<input id="unlockPassphrase" type="password" autocomplete="current-password"></label>
+  <div class="dialog-actions">
+    <button class="btn" id="unlockAndLoad">Desbloquear y cargar datos</button>
+    <button class="btn" id="skipUnlock">Ahora no</button>
+  </div>
+  <div id="unlockDialogStatus" class="status"></div>
+</dialog>
 <script src="./app.js"></script>
 <script>
 (() => {
