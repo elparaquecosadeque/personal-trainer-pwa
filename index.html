@@ -104,6 +104,35 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
       document.body.append(area); area.select(); document.execCommand("copy"); area.remove();
     }
   }
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); }
+    catch {
+      const area = document.createElement("textarea");
+      area.value = text; area.style.position = "fixed"; area.style.opacity = "0";
+      document.body.append(area); area.select(); document.execCommand("copy"); area.remove();
+    }
+  }
+  const publicRepo = () => settings.publicRepo || "personal-trainer-pwa";
+  const publicApi = (path) =>
+    `https://api.github.com/repos/${settings.owner}/${publicRepo()}/contents/${path}`;
+  const publicBaseUrl = () =>
+    (settings.publicPagesUrl || `https://${settings.owner}.github.io/${publicRepo()}`).replace(/\/$/, "");
+  async function fileBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || "").split(",")[1] || "");
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+  async function putPublicBase64(path, content, message) {
+    const res = await fetch(publicApi(path), {
+      method: "PUT",
+      headers: { ...headers(), "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "main", message, content }),
+    });
+    if (!res.ok) throw new Error(`${path}: ${res.status} ${await res.text()}`);
+  }
   function download(file) {
     const url = URL.createObjectURL(file); const link = document.createElement("a");
     link.href = url; link.download = file.name; document.body.append(link); link.click(); link.remove();
@@ -130,11 +159,43 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
       else { status.textContent = err.message || String(err); status.classList.add("bad"); }
     } finally { if (button) button.disabled = false; }
   }
+  async function publishTemporary() {
+    const status = document.getElementById("publishPendingStatus");
+    const button = document.getElementById("publishPendingPhotos");
+    try {
+      if (!token) throw new Error("Desbloquea el token en Settings primero.");
+      const paths = photoPaths();
+      if (!paths.length) throw new Error("No hay fotos pendientes en la semana visible.");
+      button.disabled = true; status.classList.remove("bad"); status.textContent = "Publicando fotos temporales...";
+      const runId = crypto.randomUUID();
+      const urls = [];
+      for (const [index, path] of paths.entries()) {
+        status.textContent = `Publicando ${index + 1}/${paths.length}...`;
+        const file = await imageFile(path);
+        const name = path.split("/").pop() || `meal-${index + 1}.jpg`;
+        const publicPath = `tmp/meals/${runId}/${name}`;
+        await putPublicBase64(publicPath, await fileBase64(file), `Publish temporary meal photo ${runId}`);
+        urls.push(`${publicBaseUrl()}/${publicPath}`);
+      }
+      const text = `${prompt}\n\nFotos temporales publicas. Cualquiera con el enlace puede verlas hasta que el cleanup/cache las retire:\n${urls.join("\n")}`;
+      await copyText(text);
+      status.textContent = `Copie el prompt con ${urls.length} URL${urls.length === 1 ? "" : "s"}. Espera 1-2 min a GitHub Pages y pegalo en ChatGPT.`;
+    } catch (err) {
+      status.textContent = err.message || String(err);
+      status.classList.add("bad");
+    } finally { if (button) button.disabled = false; }
+  }
   function install() {
     const copy = document.getElementById("copyPendingPrompt");
-    if (!copy || document.getElementById("sharePendingMeals")) return;
-    const button = document.createElement("button"); button.className = "btn"; button.id = "sharePendingMeals"; button.textContent = "Procesar en ChatGPT"; button.onclick = run; copy.parentElement?.append(button);
-    const status = document.createElement("div"); status.id = "sharePendingStatus"; status.className = "status"; status.textContent = "Comparte las fotos pendientes como archivos reales para que ChatGPT pueda inspeccionarlas visualmente."; copy.closest(".card")?.append(status);
+    if (!copy) return;
+    if (!document.getElementById("sharePendingMeals")) {
+      const button = document.createElement("button"); button.className = "btn"; button.id = "sharePendingMeals"; button.textContent = "Procesar en ChatGPT"; button.onclick = run; copy.parentElement?.append(button);
+      const status = document.createElement("div"); status.id = "sharePendingStatus"; status.className = "status"; status.textContent = "Comparte las fotos pendientes como archivos reales para que ChatGPT pueda inspeccionarlas visualmente."; copy.closest(".card")?.append(status);
+    }
+    if (!document.getElementById("publishPendingPhotos")) {
+      const button = document.createElement("button"); button.className = "btn"; button.id = "publishPendingPhotos"; button.textContent = "Publicar fotos temporales"; button.onclick = publishTemporary; copy.parentElement?.append(button);
+      const status = document.createElement("div"); status.id = "publishPendingStatus"; status.className = "status"; status.textContent = "Opcion menos privada: publica copias con GUID en GitHub Pages para que ChatGPT pueda abrirlas por URL. El cleanup las borra periodicamente, pero no es secreto real."; copy.closest(".card")?.append(status);
+    }
   }
   new MutationObserver(install).observe(document.getElementById("report"), { childList: true, subtree: true });
   install();
