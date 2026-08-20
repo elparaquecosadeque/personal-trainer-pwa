@@ -14,8 +14,6 @@ const TEXT = {
     owner: "Owner",
     repo: "Repo",
     branch: "Branch",
-    publicRepo: "Repo publico PWA",
-    publicPagesUrl: "URL publica PWA",
     token: "Token",
     passphrase: "Passphrase local",
     preferences: "Preferencias",
@@ -67,8 +65,6 @@ const TEXT = {
     owner: "Owner",
     repo: "Repo",
     branch: "Branch",
-    publicRepo: "Public PWA repo",
-    publicPagesUrl: "Public PWA URL",
     token: "Token",
     passphrase: "Local passphrase",
     preferences: "Preferences",
@@ -758,7 +754,7 @@ function renderReport() {
 }
 
 function renderSettings() {
-  $("settings").innerHTML = `<div class="card"><h2>${tr("privateGithub")}</h2>${settings.token ? `<div class="status bad">${tr("plainTokenWarning")}</div>` : ""}<div class="grid"><label>${tr("owner")}<input id="owner" value="${settings.owner || ""}"></label><label>${tr("repo")}<input id="repo" value="${settings.repo || "personal-trainer"}"></label><label>${tr("branch")}<input id="branch" value="${settings.branch || "main"}"></label><label>${tr("publicRepo")}<input id="publicRepo" value="${settings.publicRepo || "personal-trainer-pwa"}"></label><label>${tr("publicPagesUrl")}<input id="publicPagesUrl" value="${settings.publicPagesUrl || "https://elparaquecosadeque.github.io/personal-trainer-pwa"}"></label><label>${tr("token")}<input id="token" type="password" placeholder="${settings.token_cipher ? tr("tokenSaved") : ""}" value=""></label><label>${tr("passphrase")}<input id="passphrase" type="password" placeholder="${tr("notSaved")}"></label></div><details class="faq"><summary><span class="info-icon">i</span>${tr("faqTitle")}</summary><p>${tr("faqBody")}</p></details><h2>${tr("preferences")}</h2><div class="grid"><label>${tr("palette")}<select id="palette"><option value="dark">Dark</option><option value="light">Light</option><option value="forest">Forest</option></select></label><label>${tr("language")}<select id="language"><option value="es">Espanol</option><option value="en">English</option></select></label></div><div class="status">${tr("partialLanguage")}</div><div class="actions"><button class="btn" id="saveSettings">${tr("saveSettings")}</button><button class="btn" id="unlockSettings">${tr("unlock")}</button><button class="btn" id="loadData">${tr("loadData")}</button></div><div id="settingsStatus" class="status"></div></div>`;
+  $("settings").innerHTML = `<div class="card"><h2>${tr("privateGithub")}</h2>${settings.token ? `<div class="status bad">${tr("plainTokenWarning")}</div>` : ""}<div class="grid"><label>${tr("owner")}<input id="owner" value="${settings.owner || ""}"></label><label>${tr("repo")}<input id="repo" value="${settings.repo || "personal-trainer"}"></label><label>${tr("branch")}<input id="branch" value="${settings.branch || "main"}"></label><label>${tr("token")}<input id="token" type="password" placeholder="${settings.token_cipher ? tr("tokenSaved") : ""}" value=""></label><label>${tr("passphrase")}<input id="passphrase" type="password" placeholder="${tr("notSaved")}"></label></div><details class="faq"><summary><span class="info-icon">i</span>${tr("faqTitle")}</summary><p>${tr("faqBody")}</p></details><h2>${tr("preferences")}</h2><div class="grid"><label>${tr("palette")}<select id="palette"><option value="dark">Dark</option><option value="light">Light</option><option value="forest">Forest</option></select></label><label>${tr("language")}<select id="language"><option value="es">Espanol</option><option value="en">English</option></select></label></div><div class="status">${tr("partialLanguage")}</div><div class="actions"><button class="btn" id="saveSettings">${tr("saveSettings")}</button><button class="btn" id="unlockSettings">${tr("unlock")}</button><button class="btn" id="loadData">${tr("loadData")}</button></div><div id="settingsStatus" class="status"></div></div>`;
   $("palette").value = settings.palette || "dark";
   $("language").value = settings.language || "es";
   $("palette").onchange = (e) => savePreference("palette", e.target.value);
@@ -770,8 +766,6 @@ function renderSettings() {
       owner: $("owner").value.trim(),
       repo: $("repo").value.trim(),
       branch: $("branch").value.trim() || "main",
-      publicRepo: $("publicRepo").value.trim() || "personal-trainer-pwa",
-      publicPagesUrl: $("publicPagesUrl").value.trim() || "https://elparaquecosadeque.github.io/personal-trainer-pwa",
       palette: $("palette").value,
       language: $("language").value,
     };
