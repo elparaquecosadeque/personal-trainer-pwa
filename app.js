@@ -8,7 +8,7 @@ const TEXT = {
     week: "Semana",
     food: "Comida",
     report: "Reporte",
-    settings: "Settings",
+    settings: "Configuración",
     subtitle: "PWA publica, datos privados en GitHub",
     privateGithub: "GitHub privado",
     owner: "Owner",
@@ -314,6 +314,13 @@ async function unlockToken(passphrase) {
   );
   token = new TextDecoder().decode(plain);
   sessionStorage.setItem("pt_session_token", token);
+}
+
+function setLoading(active, text = tr("loadingGithub")) {
+  const loader = $("globalLoader");
+  if (!loader) return;
+  $("loaderText").textContent = text;
+  loader.classList.toggle("hide", !active);
 }
 
 function showUnlockDialog() {
@@ -699,6 +706,17 @@ function pendingMeals() {
   );
 }
 
+function pendingPrompt() {
+  const pending = pendingMeals();
+  const base =
+    "Procesa comidas pendientes. Las fotos que te paso ahora son las que estan pendientes y no puedes verlas porque son JSON en mi repo privado. Contrasta con los registros pendientes de ChatGPT en mi repo de personal trainer privado.";
+  if (!pending.length) return base;
+  const lines = pending.map(
+    ({ date, meal }) => `${date} ${mealLabel(meal.meal)}${meal.time_approx ? ` ${meal.time_approx}` : ""}`,
+  );
+  return `${base}\nComidas pendientes (${pending.length}): ${lines.join("; ")}`;
+}
+
 function mid(range) {
   return Array.isArray(range) ? Math.round((Number(range[0]) + Number(range[1])) / 2) : null;
 }
@@ -743,9 +761,9 @@ function dashboardHtml() {
 function renderReport() {
   const latest = state?.latest_workout;
   const pending = pendingMeals();
-  const prompt = "procesa comidas pendientes";
+  const prompt = pendingPrompt();
   const dates = weekDates();
-  $("report").innerHTML = `${weekNavHtml()}${dashboardHtml()}<div class="card"><h2>Ultimo sync</h2><div class="status">${state?.generated_at || "Sin snapshot cargado"}</div>${latest ? `<p><span class="pill">${latest.date}</span><span class="pill">${latest.perceived_effort || "unknown"}</span></p><div>${latest.exercises?.filter((x) => x.done).length || 0}/${latest.exercises?.length || 0} ejercicios hechos</div>` : ""}</div><div class="card"><h2>${tr("pendingForChatGPT")}</h2><div class="status">${tr("weekScope")}: ${dates[0][2]} al ${dates[6][2]}</div><p><span class="pill">${pending.length} comidas</span></p>${pending.length ? pending.map(({ date, meal }) => `<div class="meal-read"><div><div class="name">${date} · ${mealLabel(meal.meal)} ${meal.time_approx || ""}</div><div class="dose">${(meal.items || []).map((item) => item.name).filter(Boolean).join(", ") || "Sin descripcion"}</div><div class="muted">${meal.photos?.before_path ? "foto antes" : "sin foto antes"}${meal.photos?.after_path ? " · foto despues" : ""}</div></div></div>`).join("") : `<div class="status">${tr("noPending")}</div>`}<div class="actions"><button class="btn" id="copyPendingPrompt">${tr("copyPrompt")}</button></div><div class="status">Pedido: <code>${prompt}</code></div><div id="copyStatus" class="status"></div></div>`;
+  $("report").innerHTML = `${weekNavHtml()}${dashboardHtml()}<div class="card"><h2>Ultimo sync</h2><div class="status">${state?.generated_at || "Sin snapshot cargado"}</div>${latest ? `<p><span class="pill">${latest.date}</span><span class="pill">${latest.perceived_effort || "unknown"}</span></p><div>${latest.exercises?.filter((x) => x.done).length || 0}/${latest.exercises?.length || 0} ejercicios hechos</div>` : ""}</div><div class="card"><h2>${tr("pendingForChatGPT")}</h2><div class="status">${tr("weekScope")}: ${dates[0][2]} al ${dates[6][2]}</div><p><span class="pill">${pending.length} comidas</span></p>${pending.length ? pending.map(({ date, meal }) => `<div class="meal-read"><div><div class="name">${date} · ${mealLabel(meal.meal)} ${meal.time_approx || ""}</div><div class="dose">${(meal.items || []).map((item) => item.name).filter(Boolean).join(", ") || "Sin descripcion"}</div><div class="muted">${meal.photos?.before_path ? "foto antes" : "sin foto antes"}${meal.photos?.after_path ? " · foto despues" : ""}</div></div></div>`).join("") : `<div class="status">${tr("noPending")}</div>`}<div class="actions"><button class="btn" id="copyPendingPrompt">${tr("copyPrompt")}</button></div><div class="status">Pedido: <code style="white-space:pre-wrap">${prompt}</code></div><div id="copyStatus" class="status"></div></div>`;
   bindWeekNav($("report"));
   $("copyPendingPrompt").onclick = async () => {
     await navigator.clipboard.writeText(prompt);
@@ -831,14 +849,20 @@ async function loadVisibleWeek() {
 async function changeWeek(days, reset = false) {
   if (!token) return;
   visibleWeekStart = reset ? currentWeekStart() : addDays(visibleWeekStart || currentWeekStart(), days);
-  await loadVisibleWeek();
-  renderWeek();
-  renderFood();
-  renderReport();
+  setLoading(true);
+  try {
+    await loadVisibleWeek();
+    renderWeek();
+    renderFood();
+    renderReport();
+  } finally {
+    setLoading(false);
+  }
 }
 
 async function loadData() {
   const status = $("settingsStatus") || $("subtitle");
+  setLoading(true);
   try {
     if (!token) throw new Error("Desbloquea o guarda el token primero.");
     status.textContent = tr("loadingGithub");
@@ -858,6 +882,8 @@ async function loadData() {
   } catch (err) {
     status.textContent = err.message;
     status.classList.add("bad");
+  } finally {
+    setLoading(false);
   }
 }
 

@@ -41,6 +41,10 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
 .bar{height:10px;background:var(--field);border:1px solid var(--line);border-radius:999px;overflow:hidden}
 .bar i{display:block;height:100%;background:var(--accent)}
 @media(max-width:520px){.dash{grid-template-columns:1fr}.bar-row{grid-template-columns:38px 1fr 78px}}
+.loader{position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:5;display:flex;gap:8px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:8px 14px;box-shadow:0 6px 20px rgba(0,0,0,.35);font-size:13px}
+.loader.hide{display:none}
+.spinner{width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -63,6 +67,7 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
   <section id="report" class="panel"></section>
   <section id="settings" class="panel"></section>
 </div>
+<div id="globalLoader" class="loader hide" aria-live="polite"><div class="spinner"></div><span id="loaderText"></span></div>
 <dialog id="unlockDialog">
   <h2 id="unlockTitle">Desbloquear datos</h2>
   <p class="status" id="unlockBody">Hay un token cifrado guardado en este dispositivo.</p>
@@ -76,7 +81,6 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
 <script src="./app.js"></script>
 <script>
 (() => {
-  const prompt = "procesa comidas pendientes";
   function photoPaths() {
     const paths = [];
     for (const { meal } of pendingMeals()) {
@@ -96,35 +100,45 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
     for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
     return new File([bytes], path.split("/").pop() || "comida.jpg", { type: "image/jpeg" });
   }
-  async function copyPrompt() {
-    try { await navigator.clipboard.writeText(prompt); }
+  async function copyPrompt(text) {
+    try { await navigator.clipboard.writeText(text); }
     catch {
       const area = document.createElement("textarea");
-      area.value = prompt; area.style.position = "fixed"; area.style.opacity = "0";
+      area.value = text; area.style.position = "fixed"; area.style.opacity = "0";
       document.body.append(area); area.select(); document.execCommand("copy"); area.remove();
     }
-  }
-  function download(file) {
-    const url = URL.createObjectURL(file); const link = document.createElement("a");
-    link.href = url; link.download = file.name; document.body.append(link); link.click(); link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   async function run() {
     const status = document.getElementById("sharePendingStatus");
     const button = document.getElementById("sharePendingMeals");
+    const links = document.getElementById("sharePendingLinks");
     try {
       if (!token) throw new Error("Desbloquea el token en Settings primero.");
       if (!pendingMeals().length) throw new Error("No hay comidas pendientes en la semana visible.");
       button.disabled = true; status.classList.remove("bad"); status.textContent = "Preparando fotos pendientes...";
+      if (links) links.innerHTML = "";
       const files = []; for (const path of photoPaths()) files.push(await imageFile(path));
+      const prompt = pendingPrompt();
       const canShareFiles = files.length > 0 && navigator.canShare?.({ files });
       if (navigator.share && (!files.length || canShareFiles)) {
         status.textContent = files.length ? `Compartiendo ${files.length} foto${files.length === 1 ? "" : "s"}...` : "Abriendo compartir...";
         await navigator.share({ title: "Procesar comidas pendientes", text: prompt, ...(files.length ? { files } : {}) });
         status.textContent = "Selecciona ChatGPT y envía el mensaje para iniciar el análisis."; return;
       }
-      await copyPrompt(); files.forEach(download);
-      status.textContent = files.length ? `Este navegador no comparte archivos directamente. Descargué ${files.length} foto${files.length === 1 ? "" : "s"} y copié “${prompt}”. Adjunta las fotos en ChatGPT y pega el comando.` : `Copié “${prompt}”. Ábrelo en ChatGPT y envíalo.`;
+      await copyPrompt(prompt);
+      if (files.length) {
+        // ponytail: los navegadores bloquean varias descargas automáticas seguidas,
+        // así que dejamos un enlace por foto para que el usuario las guarde una a una.
+        files.forEach((file) => {
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(file); a.download = file.name;
+          a.className = "btn mini"; a.textContent = `Guardar ${file.name}`;
+          links?.append(a);
+        });
+        status.textContent = `Copié el pedido. Este navegador no comparte archivos directamente: toca cada foto de abajo para guardarla y adjúntalas en ChatGPT.`;
+      } else {
+        status.textContent = `Copié “${prompt}”. Ábrelo en ChatGPT y envíalo.`;
+      }
     } catch (err) {
       if (err?.name === "AbortError") status.textContent = "Compartir cancelado.";
       else { status.textContent = err.message || String(err); status.classList.add("bad"); }
@@ -135,7 +149,9 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
     if (!copy) return;
     if (!document.getElementById("sharePendingMeals")) {
       const button = document.createElement("button"); button.className = "btn"; button.id = "sharePendingMeals"; button.textContent = "Procesar en ChatGPT"; button.onclick = run; copy.parentElement?.append(button);
-      const status = document.createElement("div"); status.id = "sharePendingStatus"; status.className = "status"; status.textContent = "Comparte las fotos pendientes como archivos reales para que ChatGPT pueda inspeccionarlas visualmente."; copy.closest(".card")?.append(status);
+      const status = document.createElement("div"); status.id = "sharePendingStatus"; status.className = "status"; status.textContent = "Comparte las fotos pendientes como archivos reales para que ChatGPT pueda inspeccionarlas visualmente.";
+      const links = document.createElement("div"); links.id = "sharePendingLinks"; links.className = "photo-preview";
+      const card = copy.closest(".card"); card?.append(status); card?.append(links);
     }
   }
   new MutationObserver(install).observe(document.getElementById("report"), { childList: true, subtree: true });
