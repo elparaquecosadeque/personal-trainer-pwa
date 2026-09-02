@@ -241,6 +241,118 @@ function mediaFor(ex) {
   return bestScore >= 4 && best?.gif_url ? MEDIA_BASE + best.gif_url : "";
 }
 
+function searchExercises(query) {
+  const q = norm(query);
+  if (q.length < 3) return [];
+  const parts = q.split(" ").filter(Boolean);
+  return exerciseDb
+    .map((rec) => {
+      const name = norm(rec.name);
+      let score = name.includes(q) ? 8 : 0;
+      parts.forEach((part) => {
+        if (name.includes(part)) score += 2;
+      });
+      return { rec, score };
+    })
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 20)
+    .map((r) => r.rec);
+}
+
+function sessionOptionsFor(workout) {
+  const seen = new Map();
+  workout.exercises.forEach((ex) => {
+    if (!seen.has(ex.session)) seen.set(ex.session, ex.session_index ?? 0);
+  });
+  return [...seen.entries()];
+}
+
+let picker = null;
+
+function openExercisePicker(workout, { mode, session, sessionIndex, replaceIndex }) {
+  picker = { workout, mode, session, sessionIndex, replaceIndex, selected: null };
+  $("pickerTitle").textContent = mode === "replace" ? `Sustituir en ${session}` : `Añadir a ${session}`;
+  $("pickerSearchInput").value = "";
+  $("pickerResults").innerHTML = "";
+  $("pickerStatus").textContent = "";
+  $("pickerSearchView").classList.remove("hide");
+  $("pickerConfirmView").classList.add("hide");
+  $("pickerConfirmActions").classList.add("hide");
+  $("pickerSessionOptions").innerHTML = sessionOptionsFor(workout)
+    .map(([label]) => `<option value="${label}"></option>`)
+    .join("");
+  $("pickerSession").value = session;
+  $("exercisePickerDialog").showModal();
+  $("pickerSearchInput").focus();
+}
+
+function renderPickerResults() {
+  const query = $("pickerSearchInput").value;
+  const results = searchExercises(query);
+  const list = $("pickerResults");
+  list.innerHTML = "";
+  if (!results.length) {
+    list.innerHTML = `<div class="status">${norm(query).length < 3 ? "Escribe al menos 3 letras." : "Sin resultados."}</div>`;
+    return;
+  }
+  results.forEach((rec) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "picker-result";
+    const gif = rec.gif_url ? MEDIA_BASE + rec.gif_url : "";
+    button.innerHTML = `${gif ? `<img src="${gif}" alt="${rec.name}" loading="lazy">` : ""}<div><div class="picker-result-name">${rec.name}</div><div class="picker-result-meta">${rec.category} · ${rec.equipment}</div></div>`;
+    button.onclick = () => selectPickerResult(rec);
+    list.append(button);
+  });
+}
+
+function selectPickerResult(rec) {
+  picker.selected = rec;
+  $("pickerName").value = rec.name.charAt(0).toUpperCase() + rec.name.slice(1);
+  $("pickerKind").value = rec.category === "cardio" ? "duration" : "strength";
+  $("pickerTarget").value = "";
+  $("pickerSearchView").classList.add("hide");
+  $("pickerConfirmView").classList.remove("hide");
+  $("pickerConfirmActions").classList.remove("hide");
+}
+
+function backToPickerSearch() {
+  $("pickerConfirmView").classList.add("hide");
+  $("pickerConfirmActions").classList.add("hide");
+  $("pickerSearchView").classList.remove("hide");
+}
+
+function confirmPicker() {
+  if (!picker?.selected) return;
+  const name = $("pickerName").value.trim() || picker.selected.name;
+  const kind = $("pickerKind").value;
+  const target = $("pickerTarget").value.trim();
+  const session = $("pickerSession").value.trim() || picker.session;
+  const existing = sessionOptionsFor(picker.workout).find(([label]) => label === session);
+  const sessionIndex = existing ? existing[1] : picker.sessionIndex ?? 0;
+  const exercise = {
+    name,
+    target,
+    session,
+    session_index: sessionIndex,
+    done: false,
+    lookup: norm(picker.selected.name),
+    exercise_kind: kind,
+    ...(kind === "strength" ? { load_kg: null, sets: null, reps: null, rir: null } : {}),
+    ...(kind === "duration" ? { duration_min: null } : {}),
+    ...(kind === "duration_load" ? { load_kg: null, duration_min: null } : {}),
+  };
+  if (picker.mode === "replace" && picker.replaceIndex != null) {
+    picker.workout.exercises[picker.replaceIndex] = exercise;
+  } else {
+    picker.workout.exercises.push(exercise);
+  }
+  $("exercisePickerDialog").close();
+  picker = null;
+  renderToday();
+}
+
 function saveSettings(next) {
   settings = next;
   localStorage.setItem(STORE, JSON.stringify(settings));
@@ -454,7 +566,12 @@ function renderToday() {
     return;
   }
   const date = activeWorkoutDate || today();
-  const workout = date === today() ? todayWorkout || plannedWorkout(date) : weekWorkouts[date] || plannedWorkout(date);
+  let workout = date === today() ? todayWorkout : weekWorkouts[date];
+  if (!workout) {
+    workout = plannedWorkout(date);
+    if (date === today()) todayWorkout = workout;
+    else weekWorkouts[date] = workout;
+  }
   root.innerHTML = `<div class="card"><div class="muted">${workout.date}</div><h2>Entrenamiento</h2><label>Esfuerzo percibido<select id="effort"><option value="unknown">Sin registrar</option><option value="easy">Facil</option><option value="moderate">Moderado</option><option value="hard">Dificil</option><option value="near_failure">Cerca del fallo</option></select></label></div>`;
   $("effort").value = workout.perceived_effort || "unknown";
   $("effort").onchange = (e) => (workout.perceived_effort = e.target.value);
@@ -462,9 +579,22 @@ function renderToday() {
     const card = document.createElement("div");
     card.className = "card";
     card.innerHTML = `<h3>${session}</h3>`;
-    rows.forEach(([ex]) => card.append(exerciseRow(ex)));
+    rows.forEach(([ex, index]) => card.append(exerciseRow(ex, workout, index)));
+    const addBtn = document.createElement("button");
+    addBtn.className = "btn mini";
+    addBtn.textContent = "+ Añadir ejercicio";
+    addBtn.onclick = () => openExercisePicker(workout, { mode: "add", session, sessionIndex: rows[0]?.[0]?.session_index ?? 0 });
+    card.append(addBtn);
     root.append(card);
   });
+  const addSessionBtn = document.createElement("button");
+  addSessionBtn.className = "btn mini";
+  addSessionBtn.textContent = "+ Añadir ejercicio (nueva sesion)";
+  addSessionBtn.onclick = () => {
+    const [session, sessionIndex] = sessionOptionsFor(workout)[0] || ["Extra", 0];
+    openExercisePicker(workout, { mode: "add", session, sessionIndex });
+  };
+  root.append(addSessionBtn);
   const notes = document.createElement("div");
   notes.className = "card";
   notes.innerHTML = `<label>Notas<textarea id="workoutNotes"></textarea></label><div class="actions"><button class="btn" id="saveWorkout">Guardar en GitHub</button><button class="btn" id="resetWorkout">Recrear desde plan</button></div><div id="workoutStatus" class="status"></div>`;
@@ -543,7 +673,15 @@ function editWorkout(date) {
   $("today").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function exerciseRow(ex) {
+function removeExercise(workout, index) {
+  const ex = workout.exercises[index];
+  const hasData = ex.done || ex.load_kg != null || ex.sets != null || ex.reps != null || ex.rir != null || ex.duration_min != null;
+  if (hasData && !confirm(`¿Quitar ${ex.name} de hoy?`)) return;
+  workout.exercises.splice(index, 1);
+  renderToday();
+}
+
+function exerciseRow(ex, workout, index) {
   const row = document.createElement("div");
   row.className = "row";
   const strength = ex.exercise_kind === "strength";
@@ -571,6 +709,18 @@ function exerciseRow(ex) {
   done.innerHTML = `<input type="checkbox" ${ex.done ? "checked" : ""}> hecho`;
   done.querySelector("input").onchange = (e) => (ex.done = e.target.checked);
   row.append(done);
+  const actions = document.createElement("div");
+  actions.className = "row-actions";
+  const replaceBtn = document.createElement("button");
+  replaceBtn.className = "btn mini";
+  replaceBtn.textContent = "Sustituir";
+  replaceBtn.onclick = () => openExercisePicker(workout, { mode: "replace", session: ex.session, sessionIndex: ex.session_index, replaceIndex: index });
+  const removeBtn = document.createElement("button");
+  removeBtn.className = "btn mini";
+  removeBtn.textContent = "Quitar";
+  removeBtn.onclick = () => removeExercise(workout, index);
+  actions.append(replaceBtn, removeBtn);
+  row.append(actions);
   return row;
 }
 
@@ -1001,6 +1151,11 @@ $("unlockAndLoad").onclick = async () => {
 $("unlockPassphrase").onkeydown = (event) => {
   if (event.key === "Enter") $("unlockAndLoad").click();
 };
+
+$("pickerSearchInput").oninput = renderPickerResults;
+$("pickerBack").onclick = backToPickerSearch;
+$("pickerConfirm").onclick = confirmPicker;
+$("pickerCancel").onclick = () => $("exercisePickerDialog").close();
 
 applyPreferences();
 renderAll();
