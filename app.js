@@ -178,6 +178,7 @@ let weekNutrition = {};
 let exerciseDb = [];
 let visibleWeekStart = null;
 let activeWorkoutDate = null;
+let formDirty = false;
 
 const $ = (id) => document.getElementById(id);
 const tr = (key) => TEXT[settings.language || "es"]?.[key] || TEXT.es[key] || key;
@@ -390,6 +391,7 @@ function confirmPicker() {
   } else {
     picker.workout.exercises.push(exercise);
   }
+  formDirty = true;
   $("exercisePickerDialog").close();
   picker = null;
   renderToday();
@@ -720,6 +722,7 @@ function removeExercise(workout, index) {
   const hasData = ex.done || ex.load_kg != null || ex.sets != null || ex.reps != null || ex.rir != null || ex.duration_min != null;
   if (hasData && !confirm(`¿Quitar ${ex.name} de hoy?`)) return;
   workout.exercises.splice(index, 1);
+  formDirty = true;
   renderToday();
 }
 
@@ -1067,6 +1070,7 @@ async function loadData() {
     todayWorkout = await getJson(`data/import/workouts/${today()}.json`, null);
     await loadVisibleWeek();
     status.textContent = tr("dataLoaded");
+    formDirty = false;
     renderToday();
     renderWeek();
     renderFood();
@@ -1088,6 +1092,7 @@ async function saveWorkout(workout) {
     weekWorkouts[workout.date] = workout;
     if (workout.date === today()) todayWorkout = workout;
     renderWeek();
+    formDirty = false;
     status.textContent = "Guardado en GitHub.";
   } catch (err) {
     status.textContent = err.message;
@@ -1145,6 +1150,7 @@ async function saveMeal() {
     await saveCurrentState({ latest_nutrition: existing });
     weekNutrition[date] = existing;
     renderFood();
+    formDirty = false;
     $("mealStatus").textContent = "Comida guardada en GitHub.";
   } catch (err) {
     status.textContent = err.message;
@@ -1199,6 +1205,75 @@ $("pickerBack").onclick = backToPickerSearch;
 $("pickerConfirm").onclick = confirmPicker;
 $("pickerCancel").onclick = () => $("exercisePickerDialog").close();
 renderPickerChips();
+
+["today", "food"].forEach((id) => {
+  $(id).addEventListener("input", () => (formDirty = true));
+  $(id).addEventListener("change", () => (formDirty = true));
+});
+
+const PULL_THRESHOLD = 70;
+const PULL_MAX = 120;
+let pullStartY = null;
+let pullDist = 0;
+
+function setPullIndicator(dist, ready) {
+  const el = $("pullIndicator");
+  el.style.opacity = String(Math.min(dist / PULL_THRESHOLD, 1));
+  el.style.transform = `translate(-50%, ${dist - 40}px)`;
+  el.classList.toggle("ready", ready);
+}
+
+function resetPullIndicator() {
+  const el = $("pullIndicator");
+  el.style.opacity = "0";
+  el.style.transform = "translate(-50%, -40px)";
+  el.classList.remove("ready");
+}
+
+document.addEventListener(
+  "touchstart",
+  (e) => {
+    if (window.scrollY > 0 || document.querySelector("dialog[open]")) {
+      pullStartY = null;
+      return;
+    }
+    pullStartY = e.touches[0].clientY;
+    pullDist = 0;
+  },
+  { passive: true },
+);
+
+document.addEventListener(
+  "touchmove",
+  (e) => {
+    if (pullStartY == null) return;
+    const dy = e.touches[0].clientY - pullStartY;
+    if (dy <= 0 || window.scrollY > 0) {
+      pullStartY = null;
+      resetPullIndicator();
+      return;
+    }
+    pullDist = Math.min(dy * 0.5, PULL_MAX);
+    setPullIndicator(pullDist, pullDist >= PULL_THRESHOLD);
+    e.preventDefault();
+  },
+  { passive: false },
+);
+
+document.addEventListener("touchend", async () => {
+  if (pullStartY == null) return;
+  pullStartY = null;
+  if (pullDist < PULL_THRESHOLD) {
+    resetPullIndicator();
+    return;
+  }
+  if (formDirty && !confirm("Tienes cambios sin guardar. ¿Recargar de todos modos?")) {
+    resetPullIndicator();
+    return;
+  }
+  await loadData();
+  resetPullIndicator();
+});
 
 applyPreferences();
 renderAll();

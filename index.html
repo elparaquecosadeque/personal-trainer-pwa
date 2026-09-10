@@ -54,6 +54,8 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
 .loader{position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:5;display:flex;gap:8px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:8px 14px;box-shadow:0 6px 20px rgba(0,0,0,.35);font-size:13px}
 .spinner{width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;flex:none}
 @keyframes spin{to{transform:rotate(360deg)}}
+.pull-indicator{position:fixed;top:0;left:50%;transform:translate(-50%,-40px);z-index:6;width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:var(--card);border:1px solid var(--line);border-radius:50%;box-shadow:0 6px 20px rgba(0,0,0,.35);opacity:0}
+.pull-indicator.ready{border-color:var(--accent)}
 </style>
 </head>
 <body>
@@ -77,6 +79,7 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
   <section id="settings" class="panel"></section>
 </div>
 <div id="globalLoader" class="loader hide" aria-live="polite"><div class="spinner"></div><span id="loaderText"></span></div>
+<div id="pullIndicator" class="pull-indicator" aria-hidden="true"><div class="spinner"></div></div>
 <dialog id="unlockDialog">
   <h2 id="unlockTitle">Desbloquear datos</h2>
   <p class="status" id="unlockBody">Hay un token cifrado guardado en este dispositivo.</p>
