@@ -118,6 +118,14 @@ const SESSION_META = {
   weighted_walk_am: "Caminata con peso",
   rest_or_swim_or_optional_weighted_walk: "Descanso / natacion / caminata opcional",
 };
+const SPORT_PRESETS = [
+  ["Natacion en piscina", "duration"],
+  ["Natacion en mar abierto", "duration"],
+  ["Futbol", "duration"],
+  ["Voley", "duration"],
+  ["Caminata con peso", "duration_load"],
+  ["Subir y bajar escaleras con peso", "duration_load"],
+];
 const EX = {
   "goblet squat": ["Goblet squat", "3 x 6-10", "strength"],
   "dumbbell romanian deadlift": ["Peso muerto rumano", "3 x 8-12", "strength"],
@@ -307,14 +315,44 @@ function renderPickerResults() {
   });
 }
 
-function selectPickerResult(rec) {
-  picker.selected = rec;
-  $("pickerName").value = rec.name.charAt(0).toUpperCase() + rec.name.slice(1);
-  $("pickerKind").value = rec.category === "cardio" ? "duration" : "strength";
+function showPickerConfirm(selected, name, kind) {
+  picker.selected = selected;
+  $("pickerName").value = name;
+  $("pickerKind").value = kind;
   $("pickerTarget").value = "";
   $("pickerSearchView").classList.add("hide");
   $("pickerConfirmView").classList.remove("hide");
   $("pickerConfirmActions").classList.remove("hide");
+}
+
+function selectPickerResult(rec) {
+  showPickerConfirm(rec, rec.name.charAt(0).toUpperCase() + rec.name.slice(1), rec.category === "cardio" ? "duration" : "strength");
+}
+
+function selectSportPreset(name, kind) {
+  showPickerConfirm({ name }, name, kind);
+}
+
+function selectManualEntry() {
+  showPickerConfirm({ name: "" }, "", "duration");
+}
+
+function renderPickerChips() {
+  const chips = $("pickerChips");
+  SPORT_PRESETS.forEach(([name, kind]) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip";
+    chip.textContent = name;
+    chip.onclick = () => selectSportPreset(name, kind);
+    chips.append(chip);
+  });
+  const manualBtn = document.createElement("button");
+  manualBtn.type = "button";
+  manualBtn.className = "chip chip-manual";
+  manualBtn.textContent = "+ Ingresar manualmente";
+  manualBtn.onclick = () => selectManualEntry();
+  chips.append(manualBtn);
 }
 
 function backToPickerSearch() {
@@ -326,6 +364,10 @@ function backToPickerSearch() {
 function confirmPicker() {
   if (!picker?.selected) return;
   const name = $("pickerName").value.trim() || picker.selected.name;
+  if (!name) {
+    $("pickerStatus").textContent = "Escribe un nombre.";
+    return;
+  }
   const kind = $("pickerKind").value;
   const target = $("pickerTarget").value.trim();
   const session = $("pickerSession").value.trim() || picker.session;
@@ -1156,6 +1198,7 @@ $("pickerSearchInput").oninput = renderPickerResults;
 $("pickerBack").onclick = backToPickerSearch;
 $("pickerConfirm").onclick = confirmPicker;
 $("pickerCancel").onclick = () => $("exercisePickerDialog").close();
+renderPickerChips();
 
 applyPreferences();
 renderAll();

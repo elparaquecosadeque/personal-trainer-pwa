@@ -32,6 +32,10 @@
 dialog{width:min(92vw,420px);border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--text);padding:16px}
 dialog::backdrop{background:rgba(0,0,0,.55)}
 .dialog-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.picker-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{border:1px solid var(--line);background:var(--field);color:var(--text);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer}
+.chip:hover,.chip:focus-visible{border-color:var(--accent)}
+.chip-manual{color:var(--muted);border-style:dashed}
 .picker-results{max-height:50vh;overflow-y:auto;margin-top:8px;display:flex;flex-direction:column;gap:6px}
 .picker-result{display:flex;align-items:center;gap:10px;padding:8px;border:1px solid var(--line);border-radius:10px;background:var(--field);text-align:left;cursor:pointer;font:inherit;color:var(--text)}
 .picker-result img{width:56px;height:56px;object-fit:cover;border-radius:8px;background:var(--card);flex:none}
@@ -87,6 +91,7 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
   <h2 id="pickerTitle">Añadir ejercicio</h2>
   <div id="pickerSearchView">
     <label>Buscar (en ingles)<input id="pickerSearchInput" type="text" placeholder="ej. squat, curl, plank" autocomplete="off"></label>
+    <div class="picker-chips" id="pickerChips"></div>
     <div id="pickerResults" class="picker-results"></div>
   </div>
   <div id="pickerConfirmView" class="hide">
