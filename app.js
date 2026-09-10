@@ -488,12 +488,30 @@ function showUnlockDialog() {
   $("unlockPassphrase").focus();
 }
 
+function logError(operation, path, status, message) {
+  const timestamp = new Date().toISOString();
+  const entry = { timestamp, operation, path, status, message };
+  fetch(api(`data/logs/${timestamp.replace(/[:.]/g, "-")}.json`), {
+    method: "PUT",
+    headers: { ...headers(), "Content-Type": "application/json" },
+    body: JSON.stringify({
+      branch: settings.branch || "main",
+      message: `Log error ${operation} ${path}`,
+      content: toB64(`${JSON.stringify(entry, null, 2)}\n`),
+    }),
+  }).catch(() => {});
+}
+
 async function getJson(path, fallback = null) {
   const res = await fetch(`${api(path)}?ref=${encodeURIComponent(settings.branch || "main")}`, {
     headers: headers(),
   });
   if (res.status === 404) return fallback;
-  if (!res.ok) throw new Error(`${path}: ${res.status}`);
+  if (!res.ok) {
+    const text = await res.text();
+    logError("getJson", path, res.status, text);
+    throw new Error(`${path}: ${res.status}`);
+  }
   const file = await res.json();
   return JSON.parse(fromB64(file.content));
 }
@@ -514,7 +532,11 @@ async function putJson(path, obj, message) {
       sha,
     }),
   });
-  if (!res.ok) throw new Error(`${path}: ${res.status} ${await res.text()}`);
+  if (!res.ok) {
+    const text = await res.text();
+    logError("putJson", path, res.status, text);
+    throw new Error(`${path}: ${res.status} ${text}`);
+  }
 }
 
 async function putBase64(path, content, message) {
@@ -528,7 +550,11 @@ async function putBase64(path, content, message) {
     headers: { ...headers(), "Content-Type": "application/json" },
     body: JSON.stringify({ branch: settings.branch || "main", message, content, sha }),
   });
-  if (!res.ok) throw new Error(`${path}: ${res.status} ${await res.text()}`);
+  if (!res.ok) {
+    const text = await res.text();
+    logError("putBase64", path, res.status, text);
+    throw new Error(`${path}: ${res.status} ${text}`);
+  }
 }
 
 function imageToJpeg(file) {
